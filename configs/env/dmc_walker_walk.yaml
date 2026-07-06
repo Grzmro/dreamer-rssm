@@ -1,0 +1,8 @@
+# Requires dm_control (pip install dreamer-rssm[dmc]) — see README.
+name: dmc/walker/walk
+size: [64, 64]
+grayscale: false
+action_repeat: 2
+time_limit: 500
+normalize: true
+env_kwargs: {}

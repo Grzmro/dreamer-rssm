@@ -1,0 +1,22 @@
+defaults:
+  - env: atari_pong
+  - buffer: default
+  - collect: default
+  - _self_
+
+seed: 0
+
+logger:
+  backend: tensorboard  # generic interface; add "wandb" in train/logger.py later
+
+viz:
+  buffer_dir: null            # path to a saved buffer dir; null -> collect fresh data
+  collect_steps: 3000         # steps to collect when buffer_dir is null
+  out_dir: experiments/sanity
+  num_frames: 8               # frames shown in the sample-sequence grid
+
+hydra:
+  run:
+    dir: experiments/runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

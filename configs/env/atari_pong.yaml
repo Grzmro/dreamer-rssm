@@ -1,0 +1,9 @@
+name: ALE/Pong-v5
+size: [64, 64]
+grayscale: false
+action_repeat: 4
+time_limit: 1000        # effective (post-action-repeat) steps
+normalize: true
+env_kwargs:
+  frameskip: 1                    # ALE built-in frameskip off; ActionRepeat handles it
+  repeat_action_probability: 0.0  # no sticky actions

@@ -1,0 +1,3 @@
+capacity: 100000   # max stored steps; oldest episodes evicted FIFO
+seq_len: 50
+batch_size: 16

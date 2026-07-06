@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+
+# Experiment outputs (keep the directory itself via .gitkeep)
+experiments/*
+!experiments/.gitkeep
+
+# Hydra default output dirs (if run without our config overrides)
+outputs/
+multirun/
+
+# TensorBoard
+events.out.tfevents.*
+
+# Editors / OS
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store

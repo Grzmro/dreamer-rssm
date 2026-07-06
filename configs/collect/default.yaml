@@ -1,0 +1,4 @@
+num_steps: 10000     # total effective env steps to collect
+num_episodes: null   # optional cap on episodes (null = unlimited)
+log_interval: 1000   # console/TB progress logging period (steps)
+save_buffer: true    # save episodes as .npz into <run_dir>/buffer

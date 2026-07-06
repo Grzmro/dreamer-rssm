@@ -1,0 +1,10 @@
+# Template for adding more Atari games: copy this file and change `name`.
+name: ALE/Breakout-v5
+size: [64, 64]
+grayscale: false
+action_repeat: 4
+time_limit: 1000
+normalize: true
+env_kwargs:
+  frameskip: 1
+  repeat_action_probability: 0.0
