@@ -1,0 +1,13 @@
+buffer_dir: null       # path to saved Phase 0 buffer; null -> collect fresh data
+collect_steps: 50000   # random-policy steps to collect when buffer_dir is null
+
+num_updates: 15000     # gradient steps
+lr: 3e-4
+adam_eps: 1e-7
+grad_clip: 100.0       # global grad-norm clip (Dreamer uses 100-1000; 100 is the V2 default)
+
+log_interval: 100      # console + TensorBoard scalar period (updates)
+val_interval: 1000     # reward-correlation validation period (updates)
+val_batches: 10        # batches per validation pass
+checkpoint_interval: 2500
+device: auto           # auto -> cuda if available

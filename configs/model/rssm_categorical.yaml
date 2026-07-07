@@ -1,0 +1,26 @@
+# RSSM with categorical latents (DreamerV2/V3 default target).
+latent_type: categorical
+stoch_groups: 32     # 32 categorical variables...
+stoch_classes: 32    # ...with 32 classes each -> z_flat = 1024
+stoch_dim: 30        # unused for categorical (gaussian ablation only)
+unimix: 0.01         # 1% uniform mixture on categorical probs (V3 stability trick)
+
+deter_dim: 512       # GRU deterministic state
+hidden_dim: 512      # MLP width inside RSSM (gru_in, prior/posterior nets)
+cnn_depth: 32        # encoder/decoder base channels: 32-64-128-256
+cnn_layers: 4
+head_hidden_dim: 512
+head_layers: 2
+
+# KL: loss = kl_scale * [balance*max(KL(sg(q)||p), free) + (1-balance)*max(KL(q||sg(p)), free)]
+# Values follow DreamerV2 (balance 0.8) and V3 (free nats 1.0). With free
+# nats absorbing the floor, kl scale 1.0 gives a sensible effective weight
+# next to the pixel-summed reconstruction term.
+kl_balance: 0.8
+free_nats: 1.0
+
+loss_scales:
+  recon: 1.0
+  reward: 1.0
+  cont: 1.0
+  kl: 1.0

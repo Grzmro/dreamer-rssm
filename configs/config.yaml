@@ -2,6 +2,8 @@ defaults:
   - env: atari_pong
   - buffer: default
   - collect: default
+  - model: rssm_categorical
+  - train_wm: default
   - _self_
 
 seed: 0

@@ -1,0 +1,23 @@
+# Gaussian-latent ablation: simpler starting point, NOT the main target.
+# Trained/validated only at smoke-test level; full runs use rssm_categorical.
+latent_type: gaussian
+stoch_groups: 32     # unused for gaussian
+stoch_classes: 32    # unused for gaussian
+stoch_dim: 30        # diagonal Gaussian dimensionality
+unimix: 0.0          # categorical-only trick
+
+deter_dim: 512
+hidden_dim: 512
+cnn_depth: 32
+cnn_layers: 4
+head_hidden_dim: 512
+head_layers: 2
+
+kl_balance: 0.8
+free_nats: 1.0
+
+loss_scales:
+  recon: 1.0
+  reward: 1.0
+  cont: 1.0
+  kl: 1.0
