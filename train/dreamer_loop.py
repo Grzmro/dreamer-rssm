@@ -209,6 +209,12 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
         buffer = SequenceReplayBuffer(cfg.buffer.capacity, seed=cfg.seed)
 
     logger = make_logger(cfg.logger.backend, output_dir / "tb")
+    # Phase 3 (additive): shared benchmark protocol — one CSV row per episode.
+    bench = None
+    if td.get("benchmark_dir"):
+        from train.common_logger import BenchmarkLogger
+
+        bench = BenchmarkLogger(td.benchmark_dir, "dreamer", cfg.env.name, cfg.seed)
     metrics_path = output_dir / "metrics.jsonl"
     ckpt_dir = output_dir / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)
@@ -257,6 +263,8 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
             jsonl({"kind": "episode", "env_step": env_step, "update": update,
                    "return": ep_return, "length": ep_length,
                    "policy": "actor" if use_policy else "random"})
+            if bench is not None:
+                bench.log_episode(env_step, ep_return, ep_length)
             print(f"[dreamer] step {env_step:7d} | episode return {ep_return:8.2f} "
                   f"| avg10 {np.mean(recent_returns):8.2f} | updates {update}")
             _, info = env.reset()
@@ -307,6 +315,8 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
     env.close()
     logger.close()
     metrics_file.close()
+    if bench is not None:
+        bench.close()
     mins = (time.time() - start_time) / 60
     print(f"[dreamer] done: {env_step} env steps, {update} updates in {mins:.1f} min")
     print(f"[dreamer] final checkpoint: {final_path}")
