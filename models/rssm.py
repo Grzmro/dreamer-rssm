@@ -171,6 +171,19 @@ class RSSM(nn.Module):
             "post": self._stack_stats(post_stats),
         }
 
+    def imagine_step(
+        self, h: torch.Tensor, z: torch.Tensor, action: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+        """Single prior step: (h_t, z_t, a_t) -> (h_{t+1}, z_{t+1}, prior stats).
+
+        Phase 2 helper so the imagination rollout can interleave actor calls
+        with dynamics steps; ``imagine()`` is a loop over this.
+        """
+        h = self._deter_step(h, z, action)
+        prior = self._stats(self.prior_net(h))
+        z = self.sample(prior)
+        return h, z, prior
+
     def imagine(
         self,
         h0: torch.Tensor,
@@ -196,9 +209,7 @@ class RSSM(nn.Module):
         hs, zs, prior_stats = [], [], []
         for t in range(horizon):
             a = actions(h, z) if callable(actions) else actions[:, t]
-            h = self._deter_step(h, z, a)
-            prior = self._stats(self.prior_net(h))
-            z = self.sample(prior)
+            h, z, prior = self.imagine_step(h, z, a)
             hs.append(h)
             zs.append(z)
             prior_stats.append(prior)
