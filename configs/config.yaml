@@ -16,6 +16,12 @@ viz:
   collect_steps: 3000         # steps to collect when buffer_dir is null
   out_dir: experiments/sanity
   num_frames: 8               # frames shown in the sample-sequence grid
+  # Phase 1 (world model) visualizations:
+  ckpt: null                  # world-model checkpoint (required by reconstruction/open-loop viz)
+  wm_out_dir: experiments/phase1
+  recon_frames: 8             # timesteps shown side-by-side in reconstruction viz
+  warmup: 5                   # posterior warm-up steps before open-loop rollout
+  rollout_horizon: 15         # prior-only steps after warm-up
 
 hydra:
   run:

@@ -1,4 +1,5 @@
 buffer_dir: null       # path to saved Phase 0 buffer; null -> collect fresh data
+val_buffer_dir: null   # held-out buffer for validation; null -> sample train buffer
 collect_steps: 50000   # random-policy steps to collect when buffer_dir is null
 
 num_updates: 15000     # gradient steps
