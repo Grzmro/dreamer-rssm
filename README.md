@@ -231,6 +231,36 @@ python baselines/sac.py env=carracing baselines.total_env_steps=100000
 python viz/benchmark_comparison.py            # plots from experiments/benchmark
 ```
 
+### Benchmark results (Pong, shortened — single seed)
+
+Shared budget 100k env steps (post action-repeat), CleanRL default
+hyperparameters, 1 seed (methodologically weak — a real experiment needs
+>= 3 seeds; see the suggested budget below). Plots:
+`experiments/benchmark/plots/ALE_Pong-v5_{env_steps,wall_clock}.png`.
+
+| agent | return @ 100k env steps | wall-clock |
+|---|---|---|
+| PPO | ~-21 .. -18, no sustained improvement | **2.7 min** |
+| DQN (double+dueling) | -21 .. -20, no improvement | **9.2 min** |
+| Dreamer (warm-start, x-shifted +50k) | **-1.7** (avg last 10) | 249 min (+98 min WM pretrain) |
+| Dreamer (from scratch) | interrupted at 23k steps, still ~-21 | (partial) |
+
+The expected pattern shows up clearly even in these shortened runs:
+model-free agents burned the whole sample budget without leaving the
+random floor (Pong typically needs ~1M+ frames for DQN/PPO) while using
+25-90x less wall-clock time; Dreamer converted the same number of
+interactions into near-parity play at ~25x the compute per step. The
+from-scratch Dreamer curve was interrupted early (23k steps: world model
+already at recon 2.5e-4/px, policy still at the floor, entropy notably
+lower than in the warm-started run — worth watching for premature entropy
+collapse when training from scratch on sparse rewards).
+
+Suggested full experiment (outside this sandbox): 3+ seeds x 400k env
+steps for the model-free agents (DQN/PPO reach non-trivial Pong play
+around 1-2M frames = 250-500k post-repeat steps), 3 seeds x 100-150k steps
+for scratch Dreamer, identical protocol — roughly one GPU-day on a single
+A100-class card.
+
 ## Tests
 
 ```bash
