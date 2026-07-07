@@ -167,6 +167,70 @@ world-model parameter without gradient; the actor loss never trains the
 critic (baseline under `no_grad`, detached advantage); the critic loss never
 reaches the actor (detached input features, detached targets).
 
+## Model-free baselines & benchmark (Phase 3)
+
+Single-file adaptations of CleanRL's reference implementations (no CleanRL
+dependency — the point of CleanRL is that its files are self-contained),
+wired to the exact Phase 0 wrapper chain and a shared measurement protocol:
+
+- `baselines/ppo.py` — PPO (GAE, clipped surrogate; categorical or
+  diagonal-Normal head by action space; Nature CNN or MLP trunk by obs space).
+- `baselines/dqn_rainbow.py` — DQN + double targets + dueling heads.
+  **Not** full Rainbow: no prioritized replay, noisy nets, C51 or n-step.
+- `baselines/sac.py` — SAC with twin Q, EMA targets, entropy auto-tuning;
+  pixel branch trains a CNN encoder with the Q loss only and feeds the
+  actor detached features (SAC-AE/DrQ convention).
+
+Hyperparameters are CleanRL defaults, deliberately untuned, except replay
+capacity / learning-starts shrunk to the benchmark budget (documented in
+`configs/baselines/default.yaml`).
+
+### Measurement protocol
+
+**The x-axis of every sample-efficiency comparison is environment
+interactions (env steps, counted after action repeat) — not gradient steps
+and not wall-clock time.** All agents step the same Phase 0 wrapper chain,
+count steps identically (including random prefill/warm-up), report raw
+(unclipped) episode returns through the same CSV logger
+(`train/common_logger.py`), and every curve also records wall-clock time.
+
+Dreamer typically wins sample-efficiency (fewer env steps to a given reward
+level) because it performs `train_ratio` gradient updates per env step on
+imagined data; model-free baselines typically win wall-clock time (less
+real time per env step) and/or the asymptote (higher final reward with an
+unconstrained step budget). **That difference is what this benchmark is
+designed to show — it is not something to hide or average away.** The
+reward-vs-wall-clock plot exists precisely to show the other side of the
+trade-off.
+
+Deliberate protocol deviations (all documented, none silent):
+
+1. Feedforward baselines get **grayscale + 4-frame channel stack** (the
+   conventional model-free Atari input — a memoryless policy cannot infer
+   velocity from one frame); Dreamer keeps single RGB frames because the
+   RSSM builds temporal state. Same emulator, action repeat, time limit
+   and rewards (regression-tested in `tests/test_baseline_protocol.py`).
+2. **No reward clipping anywhere** (CleanRL's Atari scripts clip to
+   [-1, 1]; Pong rewards already are, so nothing changes on Pong, and the
+   plots stay in raw-return units everywhere).
+3. No NoopReset / FireReset / EpisodicLife wrappers for anyone.
+4. DQN/SAC bootstrap masks use `terminated` only (truncation is not death),
+   consistent with the Dreamer continue head.
+5. Replay capacity and learning-starts for DQN/SAC shrunk from CleanRL's
+   1M-step defaults to the benchmark budget.
+
+```bash
+# Everything on one env, shared budget, then comparison plots:
+python train/run_benchmark.py benchmark.total_env_steps=100000
+python train/run_benchmark.py env=carracing "benchmark.agents=[dreamer,ppo,sac]"
+
+# Individual agents:
+python baselines/ppo.py baselines.total_env_steps=100000
+python baselines/dqn_rainbow.py baselines.total_env_steps=100000
+python baselines/sac.py env=carracing baselines.total_env_steps=100000
+python viz/benchmark_comparison.py            # plots from experiments/benchmark
+```
+
 ## Tests
 
 ```bash
