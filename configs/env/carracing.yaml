@@ -1,0 +1,8 @@
+name: CarRacing-v3
+size: [64, 64]
+grayscale: false
+action_repeat: 2        # common Dreamer choice for CarRacing
+time_limit: 500         # effective (post-action-repeat) steps
+normalize: true
+env_kwargs:
+  continuous: true
