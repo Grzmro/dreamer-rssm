@@ -1,0 +1,15 @@
+# Actor-critic trained in imagination (Phase 2).
+action_type: auto      # auto -> detect from env.action_space; discrete | continuous
+
+actor:
+  hidden_dim: 512
+  num_layers: 3
+  unimix: 0.01         # discrete: 1% uniform mixture on action probs
+  min_std: 0.1         # continuous: lower bound on the Normal std
+  init_std: 1.0        # continuous: std at zero pre-activation
+
+critic:
+  hidden_dim: 512
+  num_layers: 3
+  head: symlog_twohot  # mse | symlog_twohot (V3); same lesson as the reward head
+  tau: 0.98            # EMA coefficient of the target critic, per gradient step
