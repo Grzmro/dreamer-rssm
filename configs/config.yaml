@@ -24,6 +24,10 @@ viz:
   recon_frames: 8             # timesteps shown side-by-side in reconstruction viz
   warmup: 5                   # posterior warm-up steps before open-loop rollout
   rollout_horizon: 15         # prior-only steps after warm-up
+  # Phase 2 (dreamer) visualizations:
+  run_dir: null               # dreamer run dir containing metrics.jsonl
+  dream_out: null             # output PNG; null -> <run_dir>/dream_vs_real.png
+  dream_window: 10            # rolling-mean window (episodes)
 
 hydra:
   run:
