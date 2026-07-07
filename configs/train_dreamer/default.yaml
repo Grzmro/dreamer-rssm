@@ -1,0 +1,31 @@
+# Full Dreamer loop (Phase 2): collect with the actor <-> train WM + actor-critic.
+total_env_steps: 100000   # env steps AFTER prefill (with action_repeat 4 = 400k frames)
+prefill_steps: 5000       # random-policy steps before any training
+buffer_dir: null          # preload a saved buffer (counts toward/replaces prefill)
+init_wm_ckpt: null        # warm-start the world model from a Phase 1 checkpoint
+
+# Gradient updates per env step (fractional, accumulator-based). One update
+# replays batch_size*seq_len = 800 steps, so 0.3 updates/env-step is a replay
+# ratio of ~240 replayed steps per collected step — sample-hungry but wall-
+# clock-friendly on a single GTX 1660 Ti (~1.5 joint updates/s). Raise for
+# more sample efficiency at proportionally slower collection.
+train_ratio: 0.3
+
+# Imagination (Dreamer defaults; see task spec — do not change casually).
+horizon: 15
+gamma: 0.99
+td_lambda: 0.95
+entropy_coef: 3e-4
+normalize_returns: true   # V3 return-range normalization (ablation switch)
+epsilon: 0.0              # extra eps-greedy on top of policy sampling + unimix
+
+# Optimizers (separate per module; V2-style LRs).
+wm_lr: 3e-4
+actor_lr: 4e-5
+critic_lr: 1e-4
+adam_eps: 1e-7
+grad_clip: 100.0
+
+log_interval: 100         # updates between scalar logs
+checkpoint_interval: 5000 # updates between checkpoints
+device: auto
