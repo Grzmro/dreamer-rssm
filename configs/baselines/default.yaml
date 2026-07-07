@@ -1,0 +1,54 @@
+# Model-free baselines (Phase 3). Hyperparameters are CleanRL defaults
+# (ppo_atari.py / dqn_atari.py / sac_continuous_action.py) unless a comment
+# says otherwise — deliberately NOT tuned for this benchmark.
+frame_stack: 4        # feedforward agents get the conventional Atari stack
+grayscale: true       # (Dreamer keeps RGB single frames + recurrent state)
+
+total_env_steps: 100000
+device: auto
+benchmark_dir: experiments/benchmark
+
+ppo:
+  num_envs: 8
+  num_steps: 128      # rollout length per env
+  lr: 2.5e-4
+  anneal_lr: true
+  gamma: 0.99
+  gae_lambda: 0.95
+  num_minibatches: 4
+  update_epochs: 4
+  clip_coef: 0.1
+  ent_coef: 0.01
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  clip_vloss: true
+
+dqn:
+  buffer_size: 100000       # CleanRL default is 1M; shrunk to the benchmark budget
+  learning_starts: 5000     # CleanRL default is 80k; shrunk to the benchmark budget
+  lr: 1e-4
+  gamma: 0.99
+  tau: 1.0                  # hard target copy ...
+  target_update_interval: 1000  # ... every 1000 steps (CleanRL default)
+  train_frequency: 4
+  batch_size: 32
+  start_e: 1.0
+  end_e: 0.01
+  exploration_fraction: 0.10
+  double: true              # double DQN target
+  dueling: true             # dueling value/advantage heads
+  # NOT full Rainbow: no prioritized replay, no noisy nets, no C51, no n-step.
+
+sac:
+  buffer_size: 100000       # shrunk from CleanRL's 1M for the same reason
+  learning_starts: 5000
+  batch_size: 256
+  gamma: 0.99
+  tau: 0.005
+  policy_lr: 3e-4
+  q_lr: 1e-3
+  policy_frequency: 2
+  target_network_frequency: 1
+  alpha: 0.2
+  autotune: true            # entropy coefficient auto-tuning
