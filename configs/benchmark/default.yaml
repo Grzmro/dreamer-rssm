@@ -1,0 +1,5 @@
+# Phase 3 benchmark driver (train/run_benchmark.py).
+agents: [dreamer, ppo, dqn, sac]  # incompatible action spaces are skipped
+total_env_steps: 100000           # shared budget, post-action-repeat steps
+seeds: [0]                        # NOTE: 1 seed = methodologically weak;
+                                  # use >= 3 for a real experiment
