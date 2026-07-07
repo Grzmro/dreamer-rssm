@@ -305,3 +305,39 @@ reliably at 64x64 with this budget — expect imagination rollouts to fuzz the
 ball; more training or a larger `cnn_depth` sharpens it. The gaussian latent
 variant is smoke-tested (loss decreases, all unit tests pass) but has no full
 reference run.
+
+## Phase 2 results
+
+Reference run: `ALE/Pong-v5`, world model warm-started from the Phase 1
+checkpoint, buffer preloaded with the same 50k random steps (so total
+unique env interactions = 50k random + 60k collected by the actor), train
+ratio 0.3 (one joint WM+AC update per ~3.3 env steps), horizon 15,
+gamma 0.99, lambda 0.95, entropy coef 3e-4, return normalization on,
+REINFORCE actor (discrete). 60k env steps, 18k updates, 249 min on the
+GTX 1660 Ti (~1.2 joint updates/s), single seed.
+
+1. **Real reward rises**: first actor episodes scored **-21.0** (the
+   random-policy floor); after ~3.5k env steps the 10-episode average
+   reached ~-6, and the final 10 episodes averaged **-1.7** with a best
+   episode of **+1.0** — near-parity Pong within 1000-step (time-limited)
+   episodes after 60k interactions.
+2. **Imagined returns track real returns**: Pearson r between the mean
+   imagined lambda-return at rollout start and the rolling real return =
+   **0.96** over 180 logged checkpoints; both curves turn upward together
+   (`experiments/dreamer_pong/dream_vs_real.png`). Imagination stays
+   mildly optimistic (~+0.004/step imagined vs ~-0.001/step real at the
+   end) — no runaway world-model exploitation observed.
+3. **No gradient leaks**: unit tests assert every world-model parameter
+   has zero/None grad after a full posterior -> rollout -> actor+critic
+   backward step (both action types), and that the actor and critic never
+   cross-train each other.
+4. **Critic is stable**: critic loss fell 5.2 -> ~0.65-0.70 and plateaued
+   with no divergent oscillation; the EMA target (tau 0.98) tracks the
+   online critic with the expected lag. Policy entropy declined gently
+   0.78 -> ~0.52 (floor 0.49, max ln 6 = 1.79) — no collapse. KL stayed
+   at 1.2-1.6 nats throughout, so the world model kept learning while
+   the policy trained on it.
+
+Working hyperparameters (deviations from spec defaults: none — H=15,
+gamma=0.99, lambda=0.95 as specified): train_ratio 0.3, WM lr 3e-4, actor
+lr 4e-5, critic lr 1e-4, entropy 3e-4 + unimix 1%, epsilon-greedy off.
