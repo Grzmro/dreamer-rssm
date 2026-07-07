@@ -30,10 +30,20 @@ from train.common_logger import load_benchmark
 
 AGENT_COLORS = {
     "dreamer": "tab:red",
+    "dreamer-warmstart": "tab:purple",
     "ppo": "tab:blue",
     "dqn": "tab:green",
     "sac": "tab:orange",
 }
+
+
+def agent_color(agent: str):
+    if agent in AGENT_COLORS:
+        return AGENT_COLORS[agent]
+    for prefix, color in AGENT_COLORS.items():  # e.g. future "dreamer-*" variants
+        if agent.startswith(prefix):
+            return color
+    return None
 
 
 def rolling(x: np.ndarray, window: int) -> np.ndarray:
@@ -45,7 +55,7 @@ def rolling(x: np.ndarray, window: int) -> np.ndarray:
 
 def _plot_axis(ax, runs_by_agent, x_key: str, window: int) -> None:
     for agent, runs in sorted(runs_by_agent.items()):
-        color = AGENT_COLORS.get(agent)
+        color = agent_color(agent)
         for i, run in enumerate(runs):
             y = rolling(run["episode_return"], window)
             x = run[x_key][len(run[x_key]) - len(y):]
