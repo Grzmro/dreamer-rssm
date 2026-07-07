@@ -164,5 +164,34 @@ wandb means adding a `WandbLogger` in one place and setting `logger.backend=wand
 
 ## Phase 1 results
 
-(filled in after the reference training run; see the summary in the training
-log at `experiments/wm_categorical/`)
+Reference setup: `ALE/Pong-v5`, 50k random-policy env steps (train) + 5k
+held-out (val, different seed), categorical latents, batch 16 x seq 50,
+Adam 3e-4, grad clip 100, on a GTX 1660 Ti (~2.2 updates/s). Base run:
+10k updates (75 min) with the MSE reward head, then 3k warm-started updates
+(23 min) with the `symlog_twohot` head (now the default config).
+
+1. **Reconstruction**: per-pixel MSE fell monotonically 0.436 -> 0.00038
+   (1k updates) -> 0.00015 (10k) -> **0.00005** after the two-hot fine-tune
+   (val). Reconstructions track both paddles and the score area; the 1-px
+   ball and digit details stay blurry (`experiments/phase1_final/reconstruction_*.png`).
+2. **Reward**: held-out Pearson r between predicted and true reward =
+   **0.75** (two-hot head, 3k updates; still rising). Diagnosis worth noting:
+   with the plain MSE head at loss scale 1.0 the correlation stayed at ~0 and
+   a probe on frozen features scored AUC 0.49 — the pixel-summed
+   reconstruction gradient dominated and the representation never encoded
+   scoring events. A `loss_scales.reward=100` fine-tune reached r = 0.91,
+   confirming the signal exists; the two-hot head fixes it at scale 1.0.
+3. **Open-loop rollout** (5 posterior warm-up steps, then 15 prior-only
+   steps replaying true actions): per-step MSE stays flat, 0.00006 (step 1)
+   -> 0.00011 (step 15) — no degeneration into noise; both paddles and the
+   playfield remain visually coherent over the horizon
+   (`experiments/phase1_final/open_loop_*.png|gif`).
+4. **KL does not collapse**: raw KL(post||prior) stabilized at 0.4–1.0 nats
+   during the base run and rose to **1.3–1.7 nats** (above free_nats = 1.0)
+   once the reward signal forced more information through the latent.
+
+Known limitations: the 1-px Pong ball is below what the decoder reproduces
+reliably at 64x64 with this budget — expect imagination rollouts to fuzz the
+ball; more training or a larger `cnn_depth` sharpens it. The gaussian latent
+variant is smoke-tested (loss decreases, all unit tests pass) but has no full
+reference run.
