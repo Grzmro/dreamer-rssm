@@ -2,24 +2,23 @@
 
 A from-scratch **DreamerV2/V3**-style world-model RL implementation (simplified, with ablations), built in phases.
 
-**Status: Phase 1 — world model.** On top of the Phase 0 data pipeline
-(environments → wrappers → sequential replay buffer → batch sampling `[B, L, C, H, W]`),
-the repo now contains the full world model: CNN encoder/decoder, RSSM with
-categorical (default) or gaussian latents, reward/continue heads, the combined
-loss with KL balancing + free nats, an isolated training loop on random-policy
-data, and reconstruction / open-loop-rollout validation. **No actor, critic, or
-imagination-based policy learning yet** — that is Phase 2 (see [Roadmap](#roadmap)).
+**Status: Phase 2 — policy learning in imagination.** On top of the Phase 0
+data pipeline and the Phase 1 world model (CNN encoder/decoder, RSSM with
+categorical/gaussian latents, reward/continue heads), the repo now contains
+the full Dreamer loop: an actor and critic trained purely on imagination
+rollouts through the frozen world-model prior, lambda-returns with an EMA
+target critic, and interleaved collection <-> world-model <-> actor-critic
+training driven by a train ratio (see [Roadmap](#roadmap)).
 
 ## Repo structure
 
 ```
 envs/          # environment wrappers (64x64 resize, grayscale, action repeat, time limit, normalization)
 data/          # sequential replay buffer (whole episodes, uint8, FIFO eviction)
-train/         # random-policy collection + world-model training loop + logger (TensorBoard)
-models/        # world model: encoder, decoder, RSSM core, heads, combined loss (Phase 1)
-viz/           # sanity checks + reconstruction & open-loop-rollout visualizations
-configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm)
-agents/        # EMPTY — Phase 2+ (actor/critic in imagination)
+train/         # collection, world-model training, lambda-returns, imagination rollout, Dreamer loop
+models/        # world model (encoder/decoder/RSSM/heads) + actor, critic, AC losses, return normalizer
+viz/           # sanity checks, reconstruction, open-loop rollout, dream-vs-real returns
+configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm, agent, train_dreamer)
 experiments/   # run outputs (gitignored)
 tests/         # pytest
 ```
@@ -120,6 +119,53 @@ python viz/open_loop_rollout.py viz.ckpt=<run>/checkpoints/wm_final.pt viz.buffe
 `open_loop_rollout` is the key check: 5 posterior warm-up steps, then 15
 prior-only steps (`imagine()`, no encoder) replaying true actions, decoded and
 compared frame-by-frame against ground truth (PNG grids + GIFs + per-step MSE).
+
+## Policy learning in imagination (Phase 2)
+
+Components (all on RSSM features `s_t = [h_t, z_t]`):
+
+- **Actor** (`models/actor.py`): MLP -> categorical logits with 1% unimix
+  (discrete, REINFORCE) or tanh-squashed Normal (continuous, reparameterized
+  dynamics backprop). `act()` returns RSSM-ready actions + log-prob + entropy.
+- **Critic** (`models/critic.py`): MLP value head (`mse` or `symlog_twohot`,
+  two-hot default) plus an **EMA target critic** (`tau = 0.98` per gradient
+  step) used only for lambda-return bootstraps.
+- **Imagination rollout** (`train/imagine_rollout.py`): starts from
+  **detached** posterior states of the replayed batch, rolls the prior for
+  `H = 15` steps with actor-chosen actions, world-model **weights frozen**
+  (the graph stays differentiable w.r.t. actions for the continuous branch;
+  the discrete branch runs dynamics under `no_grad` entirely).
+- **Lambda-returns** (`train/lambda_returns.py`): TD(lambda) with
+  `lambda = 0.95`, `gamma = 0.99`, discount `gamma * cont_prob` from the
+  continue head — an imagined episode end cuts future rewards and
+  down-weights later loss terms (cumulative-product weights).
+- **Losses** (`models/losses.py`): critic regresses toward `sg(R^lambda)`;
+  actor = REINFORCE with a no-grad critic baseline (discrete) or direct
+  return maximization (continuous), entropy bonus `3e-4`, V3 return-range
+  normalization (`models/return_normalizer.py`, ablation switch).
+- **Full loop** (`train/dreamer_loop.py`): random prefill -> collect with
+  the actor (online posterior belief tracking) while performing
+  `train_ratio` gradient updates per env step (fractional accumulator);
+  three separate Adam optimizers (WM `3e-4`, actor `4e-5`, critic `1e-4`).
+
+```bash
+# From scratch (prefill 5k random steps, then 100k env steps):
+python train/dreamer_loop.py
+
+# Warm-started from Phase 1 (recommended on a small GPU):
+python train/dreamer_loop.py \
+    train_dreamer.buffer_dir=experiments/data/train_50k/buffer \
+    train_dreamer.init_wm_ckpt=experiments/wm_final_twohot/checkpoints/wm_final.pt
+
+# Dream-vs-real validation plot from the run's metrics.jsonl:
+python viz/dream_vs_real.py viz.run_dir=experiments/<run_dir>
+```
+
+Gradient-separation invariants (unit-tested in `tests/test_losses.py` and
+`tests/test_imagine_rollout.py`): a full actor-critic step leaves every
+world-model parameter without gradient; the actor loss never trains the
+critic (baseline under `no_grad`, detached advantage); the critic loss never
+reaches the actor (detached input features, detached targets).
 
 ## Tests
 
