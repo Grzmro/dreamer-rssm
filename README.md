@@ -2,21 +2,24 @@
 
 A from-scratch **DreamerV2/V3**-style world-model RL implementation (simplified, with ablations), built in phases.
 
-**Status: Phase 0 — data infrastructure.** This commit contains only the data pipeline:
-environments → wrappers → sequential replay buffer → batch sampling `[B, L, C, H, W]`.
-**There are no neural networks here** — the RSSM, encoder/decoder, heads, actor, and critic
-land in Phase 1+ (see [Roadmap](#roadmap)).
+**Status: Phase 1 — world model.** On top of the Phase 0 data pipeline
+(environments → wrappers → sequential replay buffer → batch sampling `[B, L, C, H, W]`),
+the repo now contains the full world model: CNN encoder/decoder, RSSM with
+categorical (default) or gaussian latents, reward/continue heads, the combined
+loss with KL balancing + free nats, an isolated training loop on random-policy
+data, and reconstruction / open-loop-rollout validation. **No actor, critic, or
+imagination-based policy learning yet** — that is Phase 2 (see [Roadmap](#roadmap)).
 
 ## Repo structure
 
 ```
 envs/          # environment wrappers (64x64 resize, grayscale, action repeat, time limit, normalization)
 data/          # sequential replay buffer (whole episodes, uint8, FIFO eviction)
-train/         # random-policy data collection + logger (TensorBoard)
-viz/           # sanity checks (histograms, frame grid)
-configs/       # Hydra configs (groups: env, buffer, collect)
-models/        # EMPTY — Phase 1+ (RSSM, encoder/decoder, heads)
-agents/        # EMPTY — Phase 1+ (actor/critic in imagination)
+train/         # random-policy collection + world-model training loop + logger (TensorBoard)
+models/        # world model: encoder, decoder, RSSM core, heads, combined loss (Phase 1)
+viz/           # sanity checks + reconstruction & open-loop-rollout visualizations
+configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm)
+agents/        # EMPTY — Phase 2+ (actor/critic in imagination)
 experiments/   # run outputs (gitignored)
 tests/         # pytest
 ```
@@ -73,6 +76,51 @@ Writes to `experiments/sanity/`: episode return histogram, episode length histog
 a frame grid from a sampled sequence; prints per-step reward stats and the pixel value
 range of a batch (must be within `[-0.5, 0.5]`).
 
+## World model (Phase 1)
+
+Architecture (see `models/README.md` for file-level details):
+
+- **Encoder**: 4x stride-2 conv (32-64-128-256 channels, kernel 4), channel
+  LayerNorm + SiLU, flattened to a 4096-dim embedding.
+- **RSSM**: GRU deterministic state `h` (512), stochastic latent `z` —
+  default **categorical** 32 variables x 32 classes with straight-through
+  gradients and 1% unimix; **gaussian** (30-dim, reparameterized) available as
+  an ablation via `model=rssm_gaussian`.
+- **Decoder**: mirror transposed CNN from `[h, z]` (1536-dim features); MSE
+  reconstruction (unit-variance Gaussian — simplified vs full V3 likelihood).
+- **Heads**: reward (MSE; symlog + two-hot left as a documented TODO) and
+  continue (BCE on `1 - terminated`; truncation is not treated as death).
+- **Loss**: `recon + reward + cont + kl`, all scales 1.0 by default;
+  KL balancing 0.8/0.2 (V2) with free nats 1.0 (V3), applied per timestep
+  after summing over latent groups.
+
+Training (world model only — no policy learning):
+
+```bash
+# collect data first (or let the script collect fresh data itself)
+python train/collect.py collect.num_steps=50000 hydra.run.dir=experiments/data/train_50k
+python train/collect.py collect.num_steps=5000 seed=100 hydra.run.dir=experiments/data/val_5k
+
+python train/train_world_model.py \
+    train_wm.buffer_dir=experiments/data/train_50k/buffer \
+    train_wm.val_buffer_dir=experiments/data/val_5k/buffer
+```
+
+Logs (TensorBoard): every loss component, raw KL vs post-free-nats KL, grad
+norm, held-out reward Pearson correlation. Checkpoints land in
+`<run_dir>/checkpoints/`.
+
+Validation visualizations:
+
+```bash
+python viz/reconstruction.py    viz.ckpt=<run>/checkpoints/wm_final.pt viz.buffer_dir=<data>/buffer
+python viz/open_loop_rollout.py viz.ckpt=<run>/checkpoints/wm_final.pt viz.buffer_dir=<data>/buffer
+```
+
+`open_loop_rollout` is the key check: 5 posterior warm-up steps, then 15
+prior-only steps (`imagine()`, no encoder) replaying true actions, decoded and
+compared frame-by-frame against ground truth (PNG grids + GIFs + per-step MSE).
+
 ## Tests
 
 ```bash
@@ -83,6 +131,10 @@ Coverage: wrappers (observation shape/range/dtype, `raw_obs` in info, exact norm
 action repeat with reward summing and early stop, time limit) and the replay buffer
 (add/validation, sample shapes, normalization, padding + mask for short episodes,
 FIFO eviction, save/load) + an end-to-end integration test on `ALE/Pong-v5`.
+Phase 1 adds: pipeline shapes for both latent types, mid-sequence `is_first`
+state reset, straight-through gradient flow to the encoder, closed-form KL
+values + free-nats floor + balancing stop-gradient direction, padding-mask
+correctness, and the continue-target/truncation distinction.
 
 ## Environments
 
@@ -102,9 +154,15 @@ wandb means adding a `WandbLogger` in one place and setting `logger.backend=wand
 
 ## Roadmap
 
-- **Phase 0 (this commit)**: data pipeline — DONE.
-- **Phase 1 (next step)**: world model — CNN encoder, RSSM (deterministic core GRU,
-  prior `p(z|h)`, posterior `q(z|h,e)`), decoder, reward/continue heads; trained on batches
-  `[B, L, ...]` from this buffer (padding mask already in place). Suggested first step: encoder +
-  RSSM trained on reconstruction over the posterior, with prior/posterior KL metrics.
-- **Phase 2**: actor/critic trained in imagination on the prior (no encoder), ablations.
+- **Phase 0**: data pipeline — DONE.
+- **Phase 1**: world model (encoder/decoder, RSSM, heads, isolated training,
+  reconstruction + open-loop validation) — DONE; validation numbers in
+  [Phase 1 results](#phase-1-results).
+- **Phase 2 (next step)**: actor/critic trained in imagination on the prior
+  (no encoder), using `RSSM.imagine()` with a policy callable; then ablations
+  (categorical vs gaussian latents, KL balancing, free nats).
+
+## Phase 1 results
+
+(filled in after the reference training run; see the summary in the training
+log at `experiments/wm_categorical/`)
