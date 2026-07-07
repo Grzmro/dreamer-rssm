@@ -18,7 +18,7 @@ import torch.nn.functional as F
 
 from models.decoder import ConvDecoder
 from models.encoder import ConvEncoder
-from models.heads import ContinueHead, RewardHead
+from models.heads import ContinueHead, make_reward_head
 from models.rssm import RSSM
 
 
@@ -53,7 +53,9 @@ class WorldModel(nn.Module):
             depth=cfg.cnn_depth,
             num_layers=cfg.cnn_layers,
         )
-        self.reward_head = RewardHead(feat_dim, cfg.head_hidden_dim, cfg.head_layers)
+        self.reward_head = make_reward_head(
+            cfg.get("reward_head", "mse"), feat_dim, cfg.head_hidden_dim, cfg.head_layers
+        )
         self.continue_head = ContinueHead(feat_dim, cfg.head_hidden_dim, cfg.head_layers)
 
     # ---------------------------------------------------------------- helpers
@@ -86,8 +88,9 @@ class WorldModel(nn.Module):
 
         feat = self.features(out["h"], out["z"])  # [B, L, F]
         recon = self.decoder(feat.flatten(0, 1)).unflatten(0, (B, L))
+        out["feat"] = feat
         out["recon"] = recon
-        out["reward_pred"] = self.reward_head(feat)
+        out["reward_pred"] = self.reward_head.prediction(feat)
         out["cont_logit"] = self.continue_head(feat)
         return out
 
@@ -107,7 +110,8 @@ class WorldModel(nn.Module):
         recon_err = (out["recon"] - batch["obs"]).pow(2).sum(dim=(-3, -2, -1))  # [B,L]
         recon_loss = (recon_err * mask).sum() / denom
 
-        reward_loss = ((out["reward_pred"] - batch["reward"]).pow(2) * mask).sum() / denom
+        # MSE or two-hot cross-entropy depending on the configured head.
+        reward_loss = (self.reward_head.loss(out["feat"], batch["reward"]) * mask).sum() / denom
 
         cont_target = 1.0 - batch["terminated"].float()  # truncation is not death
         cont_loss = (

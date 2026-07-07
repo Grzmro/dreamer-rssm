@@ -6,6 +6,8 @@ stoch_classes: 32    # unused for gaussian
 stoch_dim: 30        # diagonal Gaussian dimensionality
 unimix: 0.0          # categorical-only trick
 
+reward_head: mse
+
 deter_dim: 512
 hidden_dim: 512
 cnn_depth: 32

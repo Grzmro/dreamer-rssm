@@ -1,8 +1,9 @@
 buffer_dir: null       # path to saved Phase 0 buffer; null -> collect fresh data
+init_ckpt: null        # optional checkpoint to initialize weights from (fine-tuning)
 val_buffer_dir: null   # held-out buffer for validation; null -> sample train buffer
 collect_steps: 50000   # random-policy steps to collect when buffer_dir is null
 
-num_updates: 15000     # gradient steps
+num_updates: 10000     # gradient steps (~80 min on a GTX 1660 Ti at ~2 updates/s)
 lr: 3e-4
 adam_eps: 1e-7
 grad_clip: 100.0       # global grad-norm clip (Dreamer uses 100-1000; 100 is the V2 default)
