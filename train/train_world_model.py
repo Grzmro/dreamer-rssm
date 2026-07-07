@@ -107,7 +107,12 @@ def train_world_model(cfg: DictConfig, output_dir: str | Path | None = None):
     if cfg.train_wm.init_ckpt:
         print(f"[train_wm] initializing weights from {cfg.train_wm.init_ckpt}")
         ckpt = torch.load(cfg.train_wm.init_ckpt, map_location=device, weights_only=False)
-        wm.load_state_dict(ckpt["model_state"])
+        # strict=False allows warm-starting across head changes (e.g. mse ->
+        # symlog_twohot); mismatched modules keep their fresh initialization.
+        missing, unexpected = wm.load_state_dict(ckpt["model_state"], strict=False)
+        skipped = sorted({k.split(".")[0] for k in missing + unexpected})
+        if skipped:
+            print(f"[train_wm] warm-start skipped fresh/mismatched modules: {skipped}")
     n_params = sum(p.numel() for p in wm.parameters())
     print(f"[train_wm] device={device} params={n_params / 1e6:.1f}M "
           f"latent={cfg.model.latent_type} buffer={buffer.num_steps} steps")
