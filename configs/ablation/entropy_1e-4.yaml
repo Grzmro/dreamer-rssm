@@ -1,0 +1,6 @@
+# @package _global_
+# Parametric study: entropy coefficient (base 3e-4). Probes the premature
+# entropy-collapse sensitivity observed in the from-scratch benchmark run.
+train_dreamer:
+  entropy_coef: 1e-4
+  benchmark_agent: dreamer-ent1e-4

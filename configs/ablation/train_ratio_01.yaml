@@ -1,0 +1,6 @@
+# @package _global_
+# Parametric study: gradient updates per env step (base 0.3).
+# Same env-step budget as base -> isolates the compute/sample-efficiency knob.
+train_dreamer:
+  train_ratio: 0.1
+  benchmark_agent: dreamer-tr0.1

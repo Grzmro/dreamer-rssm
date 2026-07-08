@@ -43,6 +43,9 @@ GROUPS = {
         "dreamer", "dreamer-noklbal", "dreamer-nofreenats", "dreamer-norecon",
     ],
     "latent_type": ["dreamer", "dreamer-gaussian"],
+    # Training-time parametric studies (Phase 4E / Cyfronet):
+    "train_ratio": ["dreamer", "dreamer-tr0.1", "dreamer-tr1.0"],
+    "entropy_coef": ["dreamer", "dreamer-ent1e-4", "dreamer-ent1e-3"],
 }
 
 

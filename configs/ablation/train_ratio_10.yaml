@@ -1,0 +1,4 @@
+# @package _global_
+train_dreamer:
+  train_ratio: 1.0
+  benchmark_agent: dreamer-tr1.0

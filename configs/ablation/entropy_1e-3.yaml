@@ -1,0 +1,4 @@
+# @package _global_
+train_dreamer:
+  entropy_coef: 1e-3
+  benchmark_agent: dreamer-ent1e-3

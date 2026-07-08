@@ -112,9 +112,19 @@ checkpoint + held-out data, no training involved:
 | parametric B: posterior context sweep | monotone: 1 frame → 2.5e-4 MSE/px, 12 frames → 6.8e-5; most of the gain within ~5 frames |
 | critic vs empirical discounted return-to-go | Pearson r = 0.52 (moderate by construction — G_t is a single-sample, high-variance target) |
 
-The notebook also lists the proposed **training-time parametric studies**
-(train_ratio 0.1/0.3/1.0, entropy_coef sweep, horizon + reconstruction-free
-ablations, ≥3 seeds) — deferred, commands in section C.
+The training-time parametric studies proposed there are now fully
+prepared for Cyfronet (deferred until training resumes):
+
+| study | presets | script |
+|---|---|---|
+| train_ratio 0.1 / **0.3** / 1.0 | `ablation=train_ratio_01`, base, `ablation=train_ratio_10` | `slurm/parametric.sbatch` (15-task array: 5 variants × 3 seeds, 60k env steps each) |
+| entropy_coef 1e-4 / **3e-4** / 1e-3 | `ablation=entropy_1e-4`, base, `ablation=entropy_1e-3` | same array |
+| architecture/loss ablations | `configs/ablation/*` (11 presets) | `slurm/ablations.sbatch` |
+
+`viz/ablation_summary.py` already knows the `train_ratio` and
+`entropy_coef` groups, so after the array finishes a single
+`python viz/ablation_summary.py && python viz/learning_curves.py`
+produces the mean±std plots and md/csv tables.
 
 ## Deferred work
 
