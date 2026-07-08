@@ -31,6 +31,17 @@ viz:
   run_dir: null               # dreamer run dir containing metrics.jsonl
   dream_out: null             # output PNG; null -> <run_dir>/dream_vs_real.png
   dream_window: 10            # rolling-mean window (episodes)
+  # Phase 3/4 benchmark + ablation plots:
+  benchmark_root: experiments/benchmark
+  ablation_env: null          # limit ablation summary to one env dir name
+  # Phase 4 real-vs-imagined videos:
+  video_ckpt: null            # dreamer_loop checkpoint (wm + actor)
+  video_out_dir: experiments/videos
+  video_branch_points: [30, 150, 400]  # early / middle / late branch starts
+  video_horizon: 20           # imagined steps per branch
+  video_context: 8            # shared real frames shown before the branch
+  video_max_steps: 900        # cap on the recorded real episode
+  video_fps: 8
 
 hydra:
   run:
