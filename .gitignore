@@ -11,6 +11,7 @@ venv/
 # Experiment outputs (keep the directory itself via .gitkeep)
 experiments/*
 !experiments/.gitkeep
+!experiments/run_seeds.py
 
 # Hydra default output dirs (if run without our config overrides)
 outputs/
