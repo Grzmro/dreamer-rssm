@@ -96,6 +96,26 @@ Checkpoint: `experiments/dreamer_pong/checkpoints/dreamer_final.pt`
    open-loop MSE curve). Second environment (CarRacing) deferred — no
    trained continuous checkpoint yet (no training allowed at present).
 
+## E. Method-validation notebook (inference-only evidence)
+
+`notebooks/method_validation.ipynb` (executed, outputs embedded; figures
+also in `experiments/analysis/`). Key numbers, all on the Phase 2
+checkpoint + held-out data, no training involved:
+
+| evidence | result |
+|---|---|
+| trained vs random policy (12 eval episodes each) | **−2.00 ± 1.58 vs −20.17 ± 1.86**, Mann-Whitney one-sided **p = 8.5e-6**, rank-biserial effect **1.00** (zero overlap) |
+| dream-vs-real learning correlation (training logs) | r = 0.96 |
+| reward head, held-out | Pearson r = 0.87; scoring-event detection **ROC-AUC = 0.987** |
+| continue head | cont prob 1.000 at non-terminal vs 0.699 at terminal steps |
+| parametric A: open-loop error vs horizon K=1..60 | model beats the repeat-last-frame baseline at **every** K (×5.7 avg over first 15 steps); error grows smoothly, no degeneration cliff by K=60 |
+| parametric B: posterior context sweep | monotone: 1 frame → 2.5e-4 MSE/px, 12 frames → 6.8e-5; most of the gain within ~5 frames |
+| critic vs empirical discounted return-to-go | Pearson r = 0.52 (moderate by construction — G_t is a single-sample, high-variance target) |
+
+The notebook also lists the proposed **training-time parametric studies**
+(train_ratio 0.1/0.3/1.0, entropy_coef sweep, horizon + reconstruction-free
+ablations, ≥3 seeds) — deferred, commands in section C.
+
 ## Deferred work
 
 In priority order (per the Phase 4 spec), everything runnable as-is:
