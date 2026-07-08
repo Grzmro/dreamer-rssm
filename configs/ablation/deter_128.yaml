@@ -1,0 +1,6 @@
+# @package _global_
+# Latent-size ablation: small deterministic state (base 512).
+model:
+  deter_dim: 128
+train_dreamer:
+  benchmark_agent: dreamer-deter128

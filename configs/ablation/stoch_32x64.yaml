@@ -1,0 +1,6 @@
+# @package _global_
+model:
+  stoch_groups: 32
+  stoch_classes: 64
+train_dreamer:
+  benchmark_agent: dreamer-stoch32x64

@@ -214,7 +214,9 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
     if td.get("benchmark_dir"):
         from train.common_logger import BenchmarkLogger
 
-        bench = BenchmarkLogger(td.benchmark_dir, "dreamer", cfg.env.name, cfg.seed)
+        bench = BenchmarkLogger(
+            td.benchmark_dir, td.get("benchmark_agent", "dreamer"), cfg.env.name, cfg.seed
+        )
     metrics_path = output_dir / "metrics.jsonl"
     ckpt_dir = output_dir / "checkpoints"
     ckpt_dir.mkdir(parents=True, exist_ok=True)

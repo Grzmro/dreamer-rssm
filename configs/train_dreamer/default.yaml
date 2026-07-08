@@ -27,6 +27,7 @@ adam_eps: 1e-7
 grad_clip: 100.0
 
 benchmark_dir: null       # Phase 3: shared benchmark CSV root (e.g. experiments/benchmark)
+benchmark_agent: dreamer  # CSV label; ablation presets override it (e.g. dreamer-H5)
 
 log_interval: 100         # updates between scalar logs
 checkpoint_interval: 5000 # updates between checkpoints

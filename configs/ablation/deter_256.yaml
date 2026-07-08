@@ -1,0 +1,5 @@
+# @package _global_
+model:
+  deter_dim: 256
+train_dreamer:
+  benchmark_agent: dreamer-deter256

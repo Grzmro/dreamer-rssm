@@ -1,0 +1,11 @@
+# @package _global_
+# Loss ablation (the most instructive one): reconstruction-free world model.
+# The decoder is NOT constructed at all (models/world_model.py skips the
+# module, its forward and its gradient) — the representation must be learned
+# from reward + continue + KL alone. Expected: much worse or unstable, which
+# is itself the interesting result. Note viz/reconstruction.py and
+# open_loop_rollout.py cannot run on such checkpoints (nothing to decode).
+model:
+  use_decoder: false
+train_dreamer:
+  benchmark_agent: dreamer-norecon

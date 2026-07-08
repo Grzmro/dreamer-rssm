@@ -1,0 +1,9 @@
+# @package _global_
+# Latent-type ablation: diagonal Gaussian instead of 32x32 categorical.
+# (Equivalent to model=rssm_gaussian but keeps the two-hot reward head and
+# labels the benchmark CSV, so curves are directly comparable to base.)
+model:
+  latent_type: gaussian
+  unimix: 0.0
+train_dreamer:
+  benchmark_agent: dreamer-gaussian

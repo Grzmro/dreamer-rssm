@@ -1,0 +1,5 @@
+# @package _global_
+# Imagination horizon ablation: H=5 (base run uses 15).
+train_dreamer:
+  horizon: 5
+  benchmark_agent: dreamer-H5

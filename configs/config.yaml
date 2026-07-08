@@ -8,6 +8,7 @@ defaults:
   - train_dreamer: default
   - baselines: default
   - benchmark: default
+  - ablation: null    # optional; e.g. ablation=no_free_nats (see configs/ablation/)
   - _self_
 
 seed: 0

@@ -47,11 +47,20 @@ class WorldModel(nn.Module):
             unimix=cfg.unimix,
         )
         feat_dim = self.rssm.feat_dim
-        self.decoder = ConvDecoder(
-            feat_dim=feat_dim,
-            out_channels=obs_channels,
-            depth=cfg.cnn_depth,
-            num_layers=cfg.cnn_layers,
+        # Reconstruction-free ablation (model.use_decoder=false): the decoder
+        # is not constructed at all — no parameters, no forward pass, no
+        # gradient — so the ablation removes the compute, not just the loss
+        # weight. The world model then learns from reward + continue + KL only.
+        self.use_decoder = bool(cfg.get("use_decoder", True))
+        self.decoder = (
+            ConvDecoder(
+                feat_dim=feat_dim,
+                out_channels=obs_channels,
+                depth=cfg.cnn_depth,
+                num_layers=cfg.cnn_layers,
+            )
+            if self.use_decoder
+            else None
         )
         self.reward_head = make_reward_head(
             cfg.get("reward_head", "mse"), feat_dim, cfg.head_hidden_dim, cfg.head_layers
@@ -87,9 +96,9 @@ class WorldModel(nn.Module):
         out = self.rssm.observe(embed, action, batch["is_first"])
 
         feat = self.features(out["h"], out["z"])  # [B, L, F]
-        recon = self.decoder(feat.flatten(0, 1)).unflatten(0, (B, L))
         out["feat"] = feat
-        out["recon"] = recon
+        if self.use_decoder:
+            out["recon"] = self.decoder(feat.flatten(0, 1)).unflatten(0, (B, L))
         out["reward_pred"] = self.reward_head.prediction(feat)
         out["cont_logit"] = self.continue_head(feat)
         return out
@@ -107,8 +116,11 @@ class WorldModel(nn.Module):
         denom = mask.sum().clamp_min(1.0)
 
         # Reconstruction: unit-variance Gaussian NLL == MSE summed over pixels.
-        recon_err = (out["recon"] - batch["obs"]).pow(2).sum(dim=(-3, -2, -1))  # [B,L]
-        recon_loss = (recon_err * mask).sum() / denom
+        if self.use_decoder:
+            recon_err = (out["recon"] - batch["obs"]).pow(2).sum(dim=(-3, -2, -1))
+            recon_loss = (recon_err * mask).sum() / denom
+        else:
+            recon_loss = torch.zeros((), device=batch["obs"].device)
 
         # MSE or two-hot cross-entropy depending on the configured head.
         reward_loss = (self.reward_head.loss(out["feat"], batch["reward"]) * mask).sum() / denom
@@ -142,6 +154,7 @@ class WorldModel(nn.Module):
             "loss/kl": kl_loss.detach(),  # after balancing + free nats
             "kl/value": kl_value.detach(),  # raw KL(post || prior)
             # Per-pixel MSE is easier to interpret across image sizes.
+            # Stays 0.0 in the reconstruction-free ablation.
             "recon/mse_per_pixel": (recon_loss / batch["obs"][0, 0].numel()).detach(),
         }
         return total, metrics

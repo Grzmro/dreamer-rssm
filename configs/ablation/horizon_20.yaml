@@ -1,0 +1,4 @@
+# @package _global_
+train_dreamer:
+  horizon: 20
+  benchmark_agent: dreamer-H20

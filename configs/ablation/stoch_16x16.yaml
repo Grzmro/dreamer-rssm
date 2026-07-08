@@ -1,0 +1,7 @@
+# @package _global_
+# Latent-size ablation: 16 categorical variables x 16 classes (base 32x32).
+model:
+  stoch_groups: 16
+  stoch_classes: 16
+train_dreamer:
+  benchmark_agent: dreamer-stoch16x16
