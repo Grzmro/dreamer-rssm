@@ -13,7 +13,7 @@
 #   python viz/ablation_summary.py && python viz/learning_curves.py
 
 #SBATCH --job-name=dreamer-parametric
-#SBATCH --account=plgXXXXXXX-gpu-a100      # <-- set to your PLGrid grant name
+#SBATCH --account=plglscclass26-gpu-a100
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
