@@ -1,7 +1,9 @@
 # Results & experiment status (Phase 4)
 
-Status date: 2026-07-08. **Training is currently paused at the user's
-request** — this file records what has been run, what every deferred
+Status date: 2026-07-20. **Local training is paused at the user's
+request**; the one training-time study run so far — the Phase 4E
+parametric sweep (§E) — was executed remotely on Cyfronet Athena on
+2026-07-20. This file records what has been run, what every deferred
 experiment costs, and the exact commands to finish the plan (locally or on
 Cyfronet Athena via `slurm/`). Nothing below is silently skipped: every gap
 is listed in [Deferred work](#deferred-work).
@@ -112,19 +114,39 @@ checkpoint + held-out data, no training involved:
 | parametric B: posterior context sweep | monotone: 1 frame → 2.5e-4 MSE/px, 12 frames → 6.8e-5; most of the gain within ~5 frames |
 | critic vs empirical discounted return-to-go | Pearson r = 0.52 (moderate by construction — G_t is a single-sample, high-variance target) |
 
-The training-time parametric studies proposed there are now fully
-prepared for Cyfronet (deferred until training resumes):
+The training-time parametric studies proposed there have been run on
+Cyfronet Athena (Slurm array 2806135, 15×A100, 2026-07-20; one GPU per
+(variant, seed), shared 60k env-step budget). Final Pong return,
+mean ± std over 3 seeds; `steps_to_90pct` = env steps to first reach 90%
+of the way from the group's worst to the group's best final return (a
+group-relative threshold, per `viz/ablation_summary.py` — so the base run,
+which sits in both groups, crosses a different absolute threshold in each:
+55.5k in the train_ratio group, 56.5k in the entropy_coef group):
+
+| variant | final return | steps_to_90pct |
+|---|---|---|
+| base (train_ratio 0.3, entropy 3e-4) | −11.9 ± 6.4 | ~55.5k / 56.5k |
+| train_ratio 0.1 | −20.5 ± 0.2 | n/a (no learning) |
+| **train_ratio 1.0** | **−6.1 ± 3.6** | ~47.3k |
+| **entropy_coef 1e-4** | **−6.4 ± 1.9** | ~43.8k |
+| entropy_coef 1e-3 | −14.5 ± 6.8 | ~47.3k |
+
+Reading: train_ratio is a pure compute-for-return knob at fixed sample
+count — 0.1 never leaves the random-policy floor (std 0.24: all three
+seeds pinned at −21), while 1.0 buys the best return at ~8× the
+wall-clock of 0.1 (~4 h vs ~0.5 h per seed on an A100). For entropy,
+*lower* is better at this budget: 1e-4 matches tr=1.0's return with the
+smallest seed variance of any variant, whereas 1e-3 over-explores —
+worse mean than base and the largest spread. Artifacts:
+`experiments/benchmark/plots/ablation_{train_ratio,entropy_coef}.{png,md,csv}`
+and per-run CSVs under `experiments/benchmark/ALE_Pong-v5/` (generated
+by `viz/ablation_summary.py` + `viz/learning_curves.py`).
+
+Still prepared but not yet run:
 
 | study | presets | script |
 |---|---|---|
-| train_ratio 0.1 / **0.3** / 1.0 | `ablation=train_ratio_01`, base, `ablation=train_ratio_10` | `slurm/parametric.sbatch` (15-task array: 5 variants × 3 seeds, 60k env steps each) |
-| entropy_coef 1e-4 / **3e-4** / 1e-3 | `ablation=entropy_1e-4`, base, `ablation=entropy_1e-3` | same array |
 | architecture/loss ablations | `configs/ablation/*` (11 presets) | `slurm/ablations.sbatch` |
-
-`viz/ablation_summary.py` already knows the `train_ratio` and
-`entropy_coef` groups, so after the array finishes a single
-`python viz/ablation_summary.py && python viz/learning_curves.py`
-produces the mean±std plots and md/csv tables.
 
 ## Deferred work
 
