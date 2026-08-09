@@ -87,7 +87,8 @@ Architecture (see `models/README.md` for file-level details):
   an ablation via `model=rssm_gaussian`.
 - **Decoder**: mirror transposed CNN from `[h, z]` (1536-dim features); MSE
   reconstruction (unit-variance Gaussian — simplified vs full V3 likelihood).
-- **Heads**: reward (MSE; symlog + two-hot left as a documented TODO) and
+- **Heads**: reward (default **symlog + two-hot** cross-entropy over 255 bins,
+  V3-style; plain `mse` regression kept as `model.reward_head=mse`) and
   continue (BCE on `1 - terminated`; truncation is not treated as death).
 - **Loss**: `recon + reward + cont + kl`, all scales 1.0 by default;
   KL balancing 0.8/0.2 (V2) with free nats 1.0 (V3), applied per timestep

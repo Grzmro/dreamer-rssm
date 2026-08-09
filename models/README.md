@@ -6,7 +6,8 @@
   categorical (32x32, straight-through, unimix) and gaussian latents behind `latent_type`;
   `observe()` = posterior path (training), `imagine()` = prior-only path (open-loop / Phase 2);
   KL with balancing + free nats.
-- `heads.py` — reward (MSE; symlog+two-hot is a TODO) and continue (BCE on `1 - terminated`).
+- `heads.py` — reward (symlog+two-hot cross-entropy by default, `mse` behind `reward_head`)
+  and continue (BCE on `1 - terminated`).
 - `world_model.py` — combines everything; masked loss with per-component metrics.
 
 Phase 2 (actor/critic trained in imagination) lives in `agents/` — not here.
