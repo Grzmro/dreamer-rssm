@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gymnasium as gym
+import numpy as np
 
 from envs.wrappers import (
     ActionRepeat,
@@ -31,6 +32,30 @@ def _make_base_env(env_name: str, **env_kwargs) -> gym.Env:
     return gym.make(env_name, **env_kwargs)
 
 
+def _rescale_continuous_actions(env: gym.Env) -> gym.Env:
+    """Normalize a continuous action space to [-1, 1]^A.
+
+    The Dreamer actor emits tanh-squashed actions in [-1, 1] and the replay
+    buffer stores exactly what the actor produced. Without this wrapper an env
+    with different bounds (CarRacing: Box([-1,0,0], [1,1,1]) — gas and brake
+    live in [0,1]) receives out-of-range actions: gymnasium clips gas
+    internally while the buffer keeps the unclipped value, so the world model
+    would be trained on an action the environment never applied.
+
+    Normalizing here rather than inside each agent keeps one action space for
+    the actor, the buffer, the world model and the baselines alike. PPO's clip
+    to the action-space bounds and SAC's own scale/bias become identities.
+    """
+    space = env.action_space
+    if not isinstance(space, gym.spaces.Box):
+        return env  # discrete: nothing to rescale
+    return gym.wrappers.RescaleAction(
+        env,
+        min_action=np.full(space.shape, -1.0, dtype=np.float32),
+        max_action=np.full(space.shape, 1.0, dtype=np.float32),
+    )
+
+
 def wrap_env(
     env_name: str,
     *,
@@ -43,10 +68,12 @@ def wrap_env(
 ) -> gym.Env:
     """Build an environment with the standard Dreamer-style wrapper chain.
 
-    Chain: base env -> ActionRepeat -> Resize(64x64) -> [Grayscale] ->
-    TimeLimit (in effective, post-repeat steps) -> Normalize to [-0.5, 0.5].
+    Chain: base env -> [RescaleAction to [-1,1] if continuous] -> ActionRepeat
+    -> Resize(64x64) -> [Grayscale] -> TimeLimit (in effective, post-repeat
+    steps) -> Normalize to [-0.5, 0.5].
     """
     env = _make_base_env(env_name, **env_kwargs)
+    env = _rescale_continuous_actions(env)
     if action_repeat > 1:
         env = ActionRepeat(env, action_repeat)
     env = ResizeObservation(env, tuple(size))

@@ -6,48 +6,14 @@ to pin down the observation bookkeeping around episode boundaries without
 running any gradient updates (``train_ratio=0``).
 """
 
-from pathlib import Path
-
 import numpy as np
-from hydra import compose, initialize_config_dir
 
-from envs.wrappers import NormalizeObservation, ResizeObservation
-from tests.conftest import DummyImageEnv
-
-EPISODE_LEN = 6
-
-
-def _dummy_env(_env_cfg=None):
-    """Phase 0 chain on the dummy base env: resize to 64x64, then normalize."""
-    env = DummyImageEnv(episode_len=EPISODE_LEN)
-    env = ResizeObservation(env, (64, 64))
-    return NormalizeObservation(env)
-
-
-def _tiny_cfg(total_env_steps: int):
-    config_dir = str(Path(__file__).resolve().parents[1] / "configs")
-    with initialize_config_dir(version_base="1.3", config_dir=config_dir):
-        return compose(
-            config_name="config",
-            overrides=[
-                "train_dreamer.device=cpu",
-                "train_dreamer.prefill_steps=0",
-                f"train_dreamer.total_env_steps={total_env_steps}",
-                "train_dreamer.train_ratio=0",  # collection only, no updates
-                "train_dreamer.checkpoint_interval=1000000",
-                "model.cnn_depth=4",
-                "model.deter_dim=16",
-                "model.hidden_dim=16",
-                "model.stoch_groups=4",
-                "model.stoch_classes=4",
-                "model.head_hidden_dim=16",
-                "model.head_layers=1",
-                "agent.actor.hidden_dim=16",
-                "agent.actor.num_layers=1",
-                "agent.critic.hidden_dim=16",
-                "agent.critic.num_layers=1",
-            ],
-        )
+from tests.conftest import (
+    EPISODE_LEN,
+    dummy_box_env_factory as _dummy_box_env,
+    dummy_env_factory as _dummy_env,
+    tiny_dreamer_cfg as _tiny_cfg,
+)
 
 
 def test_policy_acts_on_the_reset_frame_after_an_episode_ends(tmp_path, monkeypatch):
@@ -86,3 +52,37 @@ def test_policy_acts_on_the_reset_frame_after_an_episode_ends(tmp_path, monkeypa
     first_of_new_episode = seen[EPISODE_LEN]
     assert np.allclose(first_of_new_episode, frame_value(0), atol=1e-6)
     assert not np.allclose(first_of_new_episode, frame_value(EPISODE_LEN), atol=1e-6)
+
+
+def test_continuous_actions_stay_inside_the_action_space(tmp_path, monkeypatch):
+    """Every emitted continuous action must be a legal action for the env.
+
+    Regression: the actor emits tanh output in [-1, 1]^A and OnlinePolicy fed
+    it straight to env.step(). On an env with asymmetric bounds (CarRacing:
+    gas and brake live in [0, 1]) that is out of range — gymnasium clipped it
+    internally while the replay buffer kept the unclipped value, so the world
+    model learned from an action the env never applied. The factory now
+    rescales continuous spaces to [-1, 1], making actor, env and buffer agree.
+    """
+    from train import dreamer_loop
+
+    monkeypatch.setattr(dreamer_loop, "make_env", _dummy_box_env)
+
+    env = _dummy_box_env()
+    assert np.allclose(env.action_space.low, -1.0)
+    assert np.allclose(env.action_space.high, 1.0)
+
+    emitted: list[np.ndarray] = []
+    original_call = dreamer_loop.OnlinePolicy.__call__
+
+    def recording_call(self, obs):
+        action = original_call(self, obs)
+        emitted.append(np.asarray(action))
+        return action
+
+    monkeypatch.setattr(dreamer_loop.OnlinePolicy, "__call__", recording_call)
+    dreamer_loop.train_dreamer(_tiny_cfg(EPISODE_LEN + 3), output_dir=tmp_path)
+
+    assert emitted, "policy never acted"
+    for action in emitted:
+        assert env.action_space.contains(action.astype(np.float32)), action
