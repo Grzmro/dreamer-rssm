@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from train.common_logger import BenchmarkLogger, load_benchmark, load_run
 
@@ -30,6 +31,22 @@ def test_env_name_sanitized_and_appending(tmp_path):
     logger2.close()
     run = load_run(logger2.path)
     assert run["env_step"].tolist() == [10, 20]
+
+
+def test_load_run_rejects_two_runs_appended_together(tmp_path):
+    """A restarted (not resumed) run appends a curve that starts back at 0.
+
+    np.interp downstream does not check that its x values increase, so this
+    has to fail loudly here instead of becoming a silently wrong curve.
+    """
+    for _ in range(2):  # same agent/env/seed twice, each starting from scratch
+        logger = BenchmarkLogger(tmp_path, "dreamer", "ALE/Pong-v5", seed=7)
+        logger.log_episode(1000, -21.0, 500)
+        logger.log_episode(2000, -19.0, 500)
+        logger.close()
+
+    with pytest.raises(ValueError, match="env_step goes backwards"):
+        load_run(logger.path)
 
 
 def test_load_benchmark_structure(tmp_path):
