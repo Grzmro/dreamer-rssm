@@ -5,7 +5,7 @@
 # Usage: sbatch slurm/ablations.sbatch
 
 #SBATCH --job-name=dreamer-ablations
-#SBATCH --account=plgXXXXXXX-gpu-a100      # <-- set to your PLGrid grant name
+#SBATCH --account=plglscclass26-gpu-a100
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

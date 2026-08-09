@@ -10,7 +10,7 @@
 #   tail -f dreamer-benchmark-<jobid>.log
 
 #SBATCH --job-name=dreamer-benchmark
-#SBATCH --account=plgXXXXXXX-gpu-a100      # <-- set to your PLGrid grant name
+#SBATCH --account=plglscclass26-gpu-a100
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
