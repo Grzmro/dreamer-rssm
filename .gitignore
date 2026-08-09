@@ -20,8 +20,9 @@ multirun/
 # TensorBoard
 events.out.tfevents.*
 
-# Editors / OS
+# Editors / OS / local tooling
 .idea/
 .vscode/
+CLAUDE.md
 Thumbs.db
 .DS_Store
