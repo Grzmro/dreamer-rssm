@@ -16,12 +16,15 @@ Usage:
 
 from __future__ import annotations
 
+import colorsys
+import hashlib
 from pathlib import Path
 
 import hydra
 import matplotlib
 
 matplotlib.use("Agg")
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 from omegaconf import DictConfig
@@ -37,12 +40,28 @@ AGENT_COLORS = {
 }
 
 
+def _variant_shade(base: str, agent: str):
+    """A distinct, deterministic shade of ``base`` for one variant name.
+
+    Ablation variants share a family prefix, so returning the family colour
+    for all of them made every "dreamer-*" curve identical red on a shared
+    figure. Keeping the hue near the family's and varying lightness keeps the
+    family readable while separating its members.
+    """
+    hue, _, sat = colorsys.rgb_to_hls(*mcolors.to_rgb(base))
+    digest = int(hashlib.md5(agent.encode("utf-8")).hexdigest()[:8], 16)
+    lightness = 0.28 + 0.44 * ((digest % 1021) / 1020)
+    hue = (hue + 0.04 * ((digest // 1021) % 5 - 2)) % 1.0
+    return colorsys.hls_to_rgb(hue, lightness, sat)
+
+
 def agent_color(agent: str):
+    """Plot colour for an agent label; None lets matplotlib choose."""
     if agent in AGENT_COLORS:
         return AGENT_COLORS[agent]
-    for prefix, color in AGENT_COLORS.items():  # e.g. future "dreamer-*" variants
+    for prefix, color in AGENT_COLORS.items():  # "dreamer-H5", "dreamer-tr1.0", ...
         if agent.startswith(prefix):
-            return color
+            return _variant_shade(color, agent)
     return None
 
 

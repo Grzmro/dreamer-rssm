@@ -87,3 +87,19 @@ def test_summarize_group_writes_outputs(tmp_path):
 def test_summarize_group_skips_single_variant(tmp_path):
     agents = {"dreamer": [fake_run()]}
     assert summarize_group("horizon", ["dreamer", "dreamer-H5"], agents, tmp_path) is None
+
+
+def test_agent_colors_separate_variants_within_a_family():
+    """Every "dreamer-*" ablation used to render in the same red."""
+    from viz.benchmark_comparison import agent_color
+
+    assert agent_color("dreamer") == "tab:red"
+    assert agent_color("dreamer-warmstart") == "tab:purple"  # exact key wins
+    assert agent_color("nonesuch") is None
+
+    variants = ["dreamer-tr0.1", "dreamer-tr1.0", "dreamer-ent1e-4", "dreamer-ent1e-3"]
+    colors = [agent_color(v) for v in variants]
+    assert len({tuple(c) for c in colors}) == len(variants)
+    assert all(c != "tab:red" for c in colors)
+    # Stable across calls/processes (hashlib, not the randomized builtin hash).
+    assert colors == [agent_color(v) for v in variants]
