@@ -10,4 +10,6 @@
   and continue (BCE on `1 - terminated`).
 - `world_model.py` — combines everything; masked loss with per-component metrics.
 
-Phase 2 (actor/critic trained in imagination) lives in `agents/` — not here.
+Phase 2 (actor/critic trained in imagination) lives here too: `actor.py`,
+`critic.py`, `losses.py`, `return_normalizer.py`. The rollout itself is in
+`train/imagine_rollout.py`.

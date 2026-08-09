@@ -1,6 +1,7 @@
 """Imagination rollout: actor + frozen world model, prior dynamics only.
 
-Gradient rules (the whole point of this module — see tests/test_gradient_leak.py):
+Gradient rules (the whole point of this module — asserted in
+tests/test_imagine_rollout.py and tests/test_losses.py):
 
 1. START DETACH: the posterior start states (h_0, z_0) are detached, so no
    actor/critic gradient can ever reach world-model parameters through the

@@ -7,7 +7,7 @@ whose only purpose is to prove the pipeline executes and stays numerically
 sane. They are NOT the deferred Cyfronet training and none of their numbers
 are scientific results.
 
-    Tier 1  unit tests            pytest -q  (78 tests)
+    Tier 1  unit tests            pytest -q
     Tier 2  import + Hydra compose integrity (every entry point + ablation preset)
     Tier 3  training smoke runs   dreamer / ppo / dqn / ppo-cont / sac / run_seeds
     Tier 4  visualization + notebook on existing checkpoints/data

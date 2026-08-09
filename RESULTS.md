@@ -1,12 +1,19 @@
 # Results & experiment status (Phase 4)
 
-Status date: 2026-07-20. **Local training is paused at the user's
+Status date: 2026-08-09. **Local training is paused at the user's
 request**; the one training-time study run so far — the Phase 4E
 parametric sweep (§E) — was executed remotely on Cyfronet Athena on
 2026-07-20. This file records what has been run, what every deferred
 experiment costs, and the exact commands to finish the plan (locally or on
 Cyfronet Athena via `slurm/`). Nothing below is silently skipped: every gap
 is listed in [Deferred work](#deferred-work).
+
+Revised 2026-08-09 after an audit of the recorded runs, with no new training:
+the dream-vs-real correlation is now reported detrended as well as raw (§E,
+and README "Phase 2 results" §2), the seed-dependent failure mode is stated
+explicitly (§E), and two correctness fixes landed — continuous action
+rescaling and reproducible seeding — both noted where they affect the
+results below.
 
 ## A. Environment validation ladder
 
@@ -107,7 +114,7 @@ checkpoint + held-out data, no training involved:
 | evidence | result |
 |---|---|
 | trained vs random policy (12 eval episodes each) | **−2.00 ± 1.58 vs −20.17 ± 1.86**, Mann-Whitney one-sided **p = 8.5e-6**, rank-biserial effect **1.00** (zero overlap) |
-| dream-vs-real learning correlation (training logs) | r = 0.96 |
+| dream-vs-real learning correlation (training logs) | r = **0.96 raw**, **0.72** after removing the trend in env_step, **−0.01** on first differences — mostly a shared upward trend, not step-to-step tracking (see README "Phase 2 results" §2; all three printed by `viz/dream_vs_real.py`) |
 | reward head, held-out | Pearson r = 0.87; scoring-event detection **ROC-AUC = 0.987** |
 | continue head | cont prob 1.000 at non-terminal vs 0.699 at terminal steps |
 | parametric A: open-loop error vs horizon K=1..60 | model beats the repeat-last-frame baseline at **every** K (×5.7 avg over first 15 steps); error grows smoothly, no degeneration cliff by K=60 |
@@ -148,6 +155,30 @@ worse mean than base and the largest spread. Artifacts:
 and per-run CSVs under `experiments/benchmark/ALE_Pong-v5/` (generated
 by `viz/ablation_summary.py` + `viz/learning_curves.py`).
 
+**Known failure mode: from scratch, roughly one seed in three never leaves
+the floor.** In the base configuration seed 1 finishes at −20.8 while seeds
+0 and 2 reach −8.7 and −6.1; the same seed also fails at entropy 1e-3
+(−20.8) and is the worst of its group at train_ratio 1.0 (−10.6). That is a
+reproducible seed-dependent failure, not spread around a mean, and it is why
+the base row reads −11.9 ± 6.4. Raising train_ratio to 1.0 rescues it only
+partially. The warm-started Phase 2 run does not show it — that run starts
+from a Phase 1 world model and a preloaded buffer, i.e. 110k unique
+interactions in total, not 60k.
+
+**This sweep is the strongest internal-validity evidence in the repo.**
+train_ratio changes only how many imagination-based gradient updates are
+taken per environment step, at a fixed sample budget: 0.1 leaves all three
+seeds at the random floor, 0.3 gets −11.9, 1.0 gets −6.1. A monotone
+dose-response on exactly that knob is what distinguishes "the policy learns
+from imagined rollouts" from "the policy learns from something else".
+
+Reproducibility caveat: every run above predates the seeding fix in
+`train/seeding.py` (Gymnasium does not seed `env.action_space` from
+`reset(seed=...)`, so random prefill and exploration differed between runs
+with the same seed). The numbers remain valid as samples of across-seed
+variance, but those specific runs cannot be reproduced step for step. Runs
+started after the fix can.
+
 Still prepared but not yet run:
 
 | study | presets | script |
@@ -156,14 +187,51 @@ Still prepared but not yet run:
 
 ## Deferred work
 
-In priority order (per the Phase 4 spec), everything runnable as-is:
+In priority order, everything runnable as-is. Position 1 has been promoted
+above the multi-seed curves: the train_ratio dose-response (§E) already shows
+that imagination training is what drives learning, and `no_reconstruction` is
+the one remaining experiment that tests *why* — whether the pixel loss is
+load-bearing for the representation the policy learns from.
 
-1. Multi-seed Pong learning curves (B) — commands above.
-2. `no_reconstruction` + horizon ablations (C) — the two most instructive.
-3. Remaining ablation groups (C).
-4. Ladder step 3: Breakout/MsPacman seeds, then CarRacing (Dreamer
+1. **`no_reconstruction` ablation (C)** — the single most informative run
+   left. Pre-registered hypothesis, written down before launching:
+
+   > Removing the decoder collapses Pong learning to near the random floor
+   > (final return worse than −18 on 2 seeds at 30k steps), because reward
+   > and continue signals alone are too sparse to shape the latent. The
+   > Phase 1 evidence for this is direct: with the plain MSE reward head the
+   > representation never encoded scoring events (probe AUC 0.49) until the
+   > reconstruction gradient was rebalanced.
+   >
+   > Decisive either way. If it collapses, the pixel loss is load-bearing
+   > and the Phase 1 finding generalises to policy learning. If it learns
+   > anyway, the reconstruction term is not what makes this work and the
+   > README's account of the architecture needs revising.
+
+2. Horizon ablations (C) — §D found no open-loop degeneration through H=40,
+   so H=20 ≈ H=15 is the prediction; H=5 should hurt credit assignment.
+3. Multi-seed Pong learning curves (B) — commands above.
+4. Remaining ablation groups (C).
+5. Ladder step 3: Breakout/MsPacman seeds, then CarRacing (Dreamer
    continuous + SAC + PPO) with fewer seeds; CarRacing videos afterwards.
+   Note CarRacing is now unblocked on the action-space side — continuous
+   actions are rescaled to [-1,1] in the shared wrapper chain, so the buffer
+   stores the action the env actually applied (see README, protocol
+   deviation 6).
 
 Suggested venue: Cyfronet Athena (A100) — `slurm/setup_athena.sh`,
 `slurm/benchmark.sbatch`, `slurm/benchmark_array.sbatch`,
 `slurm/ablations.sbatch`. Full plan ≈ 1–2 A100 GPU-days total.
+
+The ablation array indexes `configs/ablation/` presets in the order listed in
+`slurm/ablations.sbatch`, so single studies can be launched without the whole
+matrix (~2 h/run on a 1660 Ti, ~25 min on an A100; 2 seeds per preset):
+
+```bash
+sbatch --array=10   slurm/ablations.sbatch   # no_reconstruction only  (~1 A100-h)
+sbatch --array=1-3  slurm/ablations.sbatch   # horizon_5 / _10 / _20   (~3 A100-h)
+sbatch --array=0-10 slurm/ablations.sbatch   # the full matrix         (~5 A100-h)
+
+# After the array finishes:
+python viz/ablation_summary.py && python viz/learning_curves.py
+```
