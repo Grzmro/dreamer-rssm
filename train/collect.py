@@ -17,6 +17,7 @@ from omegaconf import DictConfig
 from data.replay_buffer import SequenceReplayBuffer
 from envs import make_env
 from train.logger import make_logger
+from train.seeding import seed_everything
 
 
 def _zero_action(action_space):
@@ -32,6 +33,7 @@ def collect_random_data(cfg: DictConfig, output_dir: str | Path | None = None):
     output_dir = Path(output_dir)
 
     env = make_env(cfg.env)
+    seed_everything(cfg.seed, env)  # incl. env.action_space -> reproducible prefill
     buffer = SequenceReplayBuffer(cfg.buffer.capacity, seed=cfg.seed)
     logger = make_logger(cfg.logger.backend, output_dir / "tb")
 

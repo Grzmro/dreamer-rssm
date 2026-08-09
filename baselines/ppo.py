@@ -25,6 +25,7 @@ from torch.distributions import Categorical, Normal
 
 from baselines.common import make_baseline_env
 from train.common_logger import BenchmarkLogger
+from train.seeding import seed_everything
 from train.train_world_model import resolve_device
 
 
@@ -109,15 +110,13 @@ def train_ppo(cfg: DictConfig, seed: int | None = None) -> None:
     p = b.ppo
     seed = cfg.seed if seed is None else seed
     device = resolve_device(b.device)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
     envs = gym.vector.SyncVectorEnv(
         [
             lambda: make_baseline_env(cfg.env, b.frame_stack, b.grayscale)
             for _ in range(p.num_envs)
         ]
     )
+    seed_everything(seed, envs)
     agent = Agent(envs.single_observation_space, envs.single_action_space).to(device)
     optimizer = torch.optim.Adam(agent.parameters(), lr=p.lr, eps=1e-5)
     bench = BenchmarkLogger(b.benchmark_dir, "ppo", cfg.env.name, seed)
