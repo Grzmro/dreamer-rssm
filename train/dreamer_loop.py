@@ -269,7 +269,11 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
                 bench.log_episode(env_step, ep_return, ep_length)
             print(f"[dreamer] step {env_step:7d} | episode return {ep_return:8.2f} "
                   f"| avg10 {np.mean(recent_returns):8.2f} | updates {update}")
-            _, info = env.reset()
+            # The reset observation must be kept: it is both obs[0] of the new
+            # episode in the buffer AND the frame the policy builds its fresh
+            # belief state from. Dropping it made the actor pick the first
+            # action of every episode from the previous episode's last frame.
+            obs, info = env.reset()
             episode = _new_episode(info["raw_obs"], env.action_space)
             policy.reset()
             if env_step >= prefill_needed:
