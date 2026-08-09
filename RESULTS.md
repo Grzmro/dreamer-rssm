@@ -121,18 +121,24 @@ mean ± std over 3 seeds; `steps_to_90pct` = env steps to first reach 90%
 of the way from the group's worst to the group's best final return (a
 group-relative threshold, per `viz/ablation_summary.py` — so the base run,
 which sits in both groups, crosses a different absolute threshold in each:
-55.5k in the train_ratio group, 56.5k in the entropy_coef group):
+55.5k in the train_ratio group, 56.5k in the entropy_coef group).
+`seeds reaching` is how many of the three seeds crossed that threshold at
+all: the step count averages **only those**, so it is reported for
+completeness and is not a ranking metric here.
 
-| variant | final return | steps_to_90pct |
-|---|---|---|
-| base (train_ratio 0.3, entropy 3e-4) | −11.9 ± 6.4 | ~55.5k / 56.5k |
-| train_ratio 0.1 | −20.5 ± 0.2 | n/a (no learning) |
-| **train_ratio 1.0** | **−6.1 ± 3.6** | ~47.3k |
-| **entropy_coef 1e-4** | **−6.4 ± 1.9** | ~43.8k |
-| entropy_coef 1e-3 | −14.5 ± 6.8 | ~47.3k |
+| variant | final return | steps_to_90pct | seeds reaching |
+|---|---|---|---|
+| base (train_ratio 0.3, entropy 3e-4) | −11.9 ± 6.4 | ~55.5k / 56.5k | 1/3 in both groups |
+| train_ratio 0.1 | −20.5 ± 0.2 | n/a (no learning) | 0/3 |
+| **train_ratio 1.0** | **−6.1 ± 3.6** | ~47.3k | 2/3 |
+| **entropy_coef 1e-4** | **−6.4 ± 1.9** | ~43.8k | 1/3 |
+| entropy_coef 1e-3 | −14.5 ± 6.8 | ~47.3k | 1/3 |
 
-Reading: train_ratio is a pure compute-for-return knob at fixed sample
-count — 0.1 never leaves the random-policy floor (std 0.24: all three
+Reading — every conclusion below rests on `final return`, which is computed
+from all three seeds; apart from train_ratio 1.0 each step count comes from
+a single seed, so the gaps between them (43.8k vs 47.3k) are noise rather
+than an effect. train_ratio is a pure compute-for-return knob at fixed
+sample count — 0.1 never leaves the random-policy floor (std 0.24: all three
 seeds pinned at −21), while 1.0 buys the best return at ~8× the
 wall-clock of 0.1 (~4 h vs ~0.5 h per seed on an A100). For entropy,
 *lower* is better at this budget: 1e-4 matches tr=1.0's return with the
