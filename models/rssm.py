@@ -104,7 +104,9 @@ class RSSM(nn.Module):
 
     def _stats(self, raw: torch.Tensor) -> dict[str, torch.Tensor]:
         if self.latent_type == "categorical":
-            logits = raw.view(-1, self.stoch_groups, self.stoch_classes)
+            # unflatten (not view(-1, ...)): keeps any leading batch/time dims
+            # instead of silently collapsing them into one.
+            logits = raw.unflatten(-1, (self.stoch_groups, self.stoch_classes))
             if self.unimix > 0:
                 probs = F.softmax(logits, dim=-1)
                 probs = (1 - self.unimix) * probs + self.unimix / self.stoch_classes
