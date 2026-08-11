@@ -1,0 +1,704 @@
+<title>Agent, który nauczył się grać we własnej wyobraźni</title>
+
+<style>
+  /* Palette sampled from the actual Atari 2600 Pong frames this agent played:
+     field #904811, ball #ececec, CPU paddle #d5824a, agent paddle #5cba5c.
+     Chart steps validated for colour-vision deficiency before use. */
+  :root {
+    color-scheme: light dark;
+
+    --field:  #904811;
+    --chalk:  #ececec;
+    --rival:  #d5824a;
+    --paddle: #5cba5c;
+
+    --bg:        #faf6f2;
+    --bg-sunk:   #f1e9e1;
+    --card:      #fffdfb;
+    --line:      #e2d5c8;
+    --line-soft: #eee4da;
+    --ink:       #1f1710;
+    --ink-2:     #5c4a3a;
+    --ink-3:     #8a7462;
+    --accent:    #8f4a15;
+
+    --s-agent: #3f8f43;
+    --s-base:  #3f6fb5;
+
+    --screen-bg: #2a1a0c;
+
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+
+    --measure: 64ch;
+    --radius: 3px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #14100c;
+      --bg-sunk:   #0f0c08;
+      --card:      #1d1711;
+      --line:      #372c22;
+      --line-soft: #281f18;
+      --ink:       #f0e8df;
+      --ink-2:     #c0b0a0;
+      --ink-3:     #8d7d6e;
+      --accent:    #d9954f;
+      --s-agent: #4fa350;
+      --s-base:  #5285cc;
+      --screen-bg: #0b0805;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #14100c;
+    --bg-sunk:   #0f0c08;
+    --card:      #1d1711;
+    --line:      #372c22;
+    --line-soft: #281f18;
+    --ink:       #f0e8df;
+    --ink-2:     #c0b0a0;
+    --ink-3:     #8d7d6e;
+    --accent:    #d9954f;
+    --s-agent: #4fa350;
+    --s-base:  #5285cc;
+    --screen-bg: #0b0805;
+  }
+  :root[data-theme="light"] {
+    --bg:        #faf6f2;
+    --bg-sunk:   #f1e9e1;
+    --card:      #fffdfb;
+    --line:      #e2d5c8;
+    --line-soft: #eee4da;
+    --ink:       #1f1710;
+    --ink-2:     #5c4a3a;
+    --ink-3:     #8a7462;
+    --accent:    #8f4a15;
+    --s-agent: #3f8f43;
+    --s-base:  #3f6fb5;
+    --screen-bg: #2a1a0c;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 40px) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(40px, 6vw, 72px);
+  }
+
+  .prose { max-width: var(--measure); display: flex; flex-direction: column; gap: 18px; }
+  .prose > * { margin: 0; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(28px, 4.4vw, 46px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h2 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(19px, 2.4vw, 25px);
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h3 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    margin: 0;
+  }
+  .lede { font-size: clamp(18px, 2.1vw, 21px); line-height: 1.55; color: var(--ink-2); }
+  p { margin: 0; }
+  strong { font-weight: 700; color: var(--ink); }
+
+  /* ---------- the machine ---------- */
+
+  .machine {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 22px;
+    align-items: start;
+  }
+  @media (max-width: 860px) { .machine { grid-template-columns: 1fr; } }
+
+  .screen-shell {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .scoreline {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--mono);
+  }
+  .score-side { display: flex; align-items: baseline; gap: 9px; font-size: 13px; color: var(--ink-3); }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; transform: translateY(1px); }
+  .score-num { font-size: 30px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .screen {
+    position: relative;
+    background: var(--screen-bg);
+    border-radius: 2px;
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+  }
+  .screen canvas {
+    width: 100%; height: 100%; display: block;
+    image-rendering: pixelated;
+  }
+
+  .flash {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    background: var(--paddle);
+    mix-blend-mode: screen;
+  }
+  .flash.on { animation: pop 620ms ease-out; }
+  @keyframes pop { 0% { opacity: .5 } 100% { opacity: 0 } }
+  @media (prefers-reduced-motion: reduce) { .flash.on { animation: none } }
+
+  .transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  button {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    background: var(--bg-sunk);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 7px 13px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  button:hover { background: var(--line-soft); border-color: var(--ink-3); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  .spacer { flex: 1 1 auto; }
+
+  .track {
+    height: 3px;
+    background: var(--line-soft);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .track > i { display: block; height: 100%; background: var(--accent); width: 0; }
+
+  /* ---------- dream side panel ---------- */
+
+  .side { display: flex; flex-direction: column; gap: 14px; }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 15px 16px 17px;
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .panel p { font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
+
+  .dream-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .badge {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    padding: 3px 9px;
+    white-space: nowrap;
+  }
+  .badge.live { color: var(--accent); border-color: var(--accent); }
+
+  .dream-screen {
+    position: relative;
+    background: var(--screen-bg);
+    border-radius: 2px;
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+  }
+  .dream-screen canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .dream-screen.idle { opacity: .32; filter: saturate(.4); }
+
+  .readout {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .readout dt { color: var(--ink-3); }
+  .readout dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- charts ---------- */
+
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
+
+  figure {
+    margin: 0;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  figcaption { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+  figure svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+  .bar-label { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+  .bar-value { font-family: var(--mono); font-size: 12.5px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; }
+  .axis-note { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-3); letter-spacing: 0.05em; }
+  .rule { stroke: var(--line); stroke-width: 1; }
+  .rule-zero { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; }
+  .bar { transition: opacity 120ms ease; }
+  figure:hover .bar { opacity: .55; }
+  figure .bar:hover { opacity: 1; }
+
+  /* ---------- misc ---------- */
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 15px 17px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .card p { font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
+
+  .stat-row { display: flex; flex-wrap: wrap; gap: 30px; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat b { font-family: var(--mono); font-size: 27px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+
+  .fine {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    display: flex; flex-direction: column; gap: 12px;
+    max-width: var(--measure);
+  }
+  .fine p, .fine li { font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+  .fine ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 7px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--bg-sunk); padding: 1px 5px; border-radius: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="prose">
+    <p class="eyebrow">Uczenie ze wzmocnieniem · model świata · Atari Pong</p>
+    <h1>Agent, który nauczył się grać we własnej wyobraźni</h1>
+    <p class="lede">
+      Ten program zaczynał, nie wiedząc nic — ani czym jest piłka, ani że przegrywa.
+      Po dwóch godzinach nauki wygrywa mecz z botem Atari. Najciekawsze jest to,
+      <em>jak</em> się nauczył: w dużej mierze nie grając, tylko wyobrażając sobie grę.
+    </p>
+  </header>
+
+  <section class="machine">
+    <div class="screen-shell">
+      <div class="scoreline">
+        <div class="score-side">
+          <span class="swatch" style="background: var(--paddle)"></span>
+          <span>agent</span>
+          <span class="score-num" id="scoreA">0</span>
+        </div>
+        <div class="score-side" style="flex-direction: row-reverse">
+          <span class="score-num" id="scoreB">0</span>
+          <span>bot Atari</span>
+          <span class="swatch" style="background: var(--rival)"></span>
+        </div>
+      </div>
+
+      <div class="screen">
+        <canvas id="stage" width="64" height="64"></canvas>
+        <div class="flash" id="flash"></div>
+      </div>
+
+      <div class="track"><i id="progress"></i></div>
+
+      <div class="transport">
+        <button id="mode1" aria-pressed="true">Z wyobraźnią</button>
+        <button id="mode2" aria-pressed="false">Sam mecz</button>
+        <span class="spacer"></span>
+        <button id="play">Pauza</button>
+        <button id="restart">Od nowa</button>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="panel">
+        <div class="dream-head">
+          <h3>Wyobraźnia agenta</h3>
+          <span class="badge" id="dreamBadge">czeka</span>
+        </div>
+        <div class="dream-screen idle" id="dreamShell">
+          <canvas id="dream" width="64" height="64"></canvas>
+        </div>
+        <p id="dreamText">
+          Co kilka sekund mecz staje, a agent rozwija w głowie 15 kroków naprzód —
+          rysunek obok to jego prawdziwa prognoza, nie animacja.
+        </p>
+      </div>
+
+      <div class="panel">
+        <dl class="readout">
+          <dt>ruch</dt><dd id="rMove">—</dd>
+          <dt>krok</dt><dd id="rStep">0</dd>
+          <dt>trening</dt><dd>60 000 ruchów</dd>
+          <dt>sprzęt</dt><dd>1 × GTX 1660 Ti</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="prose">
+    <h2>Dlaczego wyobraźnia zamiast grania</h2>
+    <p>
+      Typowy program uczący się gry musi ją zagrać miliony razy. Każda próba to realny czas:
+      w robotyce — zużyty sprzęt, w medycynie czy finansach — koszt, którego nikt nie chce ponosić
+      po to, żeby algorytm się rozgrzał.
+    </p>
+    <p>
+      Ten agent robi coś innego. Najpierw buduje sobie <strong>wewnętrzny model gry</strong> —
+      uczy się przewidywać, jak wygląda następna klatka po danym ruchu. Kiedy ten model już działa,
+      agent przestaje potrzebować prawdziwej gry do trenowania taktyki: rozgrywa tysiące
+      wyobrażonych partii w swojej głowie i to na nich uczy się, co się opłaca.
+    </p>
+    <div class="cards">
+      <div class="card">
+        <h3>1 · Patrzy</h3>
+        <p>Ogląda obraz gry i ściska go do garści liczb opisujących sytuację: gdzie jest piłka, gdzie paletki, dokąd to zmierza.</p>
+      </div>
+      <div class="card">
+        <h3>2 · Przewiduje</h3>
+        <p>Z tego skrótu przewiduje następną sytuację po dowolnym ruchu — bez zaglądania do prawdziwej gry.</p>
+      </div>
+      <div class="card">
+        <h3>3 · Ćwiczy w głowie</h3>
+        <p>Rozgrywa wyobrażone partie i uczy się na nich taktyki. Prawdziwa gra służy już tylko do zbierania nowych doświadczeń.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="prose" style="max-width: none">
+    <div class="prose">
+      <h2>Czy to naprawdę działa lepiej</h2>
+      <p>
+        Porównanie z dwiema standardowymi metodami — <strong>PPO</strong> i <strong>DQN</strong>.
+        Wszystkie trzy dostały tyle samo praktyki i grały w dokładnie to samo Pong.
+        W Pongu wynik <code>−21</code> znaczy „przegrana do zera", <code>0</code> to remis.
+      </p>
+    </div>
+
+    <div class="charts">
+      <figure>
+        <h3>Wynik po tej samej ilości praktyki</h3>
+        <svg viewBox="0 0 420 214" role="img" aria-label="Wynik meczu: Dreamer −1,7; PPO −20,2; DQN −20,8. Zero oznacza remis.">
+          <line class="rule-zero" x1="392" y1="14" x2="392" y2="172"></line>
+          <line class="rule" x1="24" y1="172" x2="392" y2="172"></line>
+          <text class="axis-note" x="392" y="190" text-anchor="end">0 · remis</text>
+          <text class="axis-note" x="24" y="190" text-anchor="start">−21 · przegrana do zera</text>
+
+          <g class="bar"><title>Dreamer, ten projekt: −1,7</title>
+            <text class="bar-label" x="24" y="24">Dreamer · ten projekt</text>
+            <rect x="362" y="32" width="30" height="22" rx="4" fill="var(--s-agent)"></rect>
+            <text class="bar-value" x="354" y="48" text-anchor="end">−1,7</text>
+          </g>
+          <g class="bar"><title>PPO: −20,2</title>
+            <text class="bar-label" x="24" y="78">PPO</text>
+            <rect x="38" y="86" width="354" height="22" rx="4" fill="var(--s-base)"></rect>
+            <text class="bar-value" x="384" y="102" text-anchor="end" style="fill: var(--card)">−20,2</text>
+          </g>
+          <g class="bar"><title>DQN: −20,8</title>
+            <text class="bar-label" x="24" y="132">DQN</text>
+            <rect x="28" y="140" width="364" height="22" rx="4" fill="var(--s-base)"></rect>
+            <text class="bar-value" x="384" y="156" text-anchor="end" style="fill: var(--card)">−20,8</text>
+          </g>
+        </svg>
+        <figcaption>
+          Po ~100 tys. ruchów PPO i DQN wciąż przegrywają niemal do zera — tyle praktyki im nie wystarcza.
+          Agent z modelem świata gra już prawie na remis.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <h3>Ile czasu liczył komputer</h3>
+        <svg viewBox="0 0 420 214" role="img" aria-label="Czas obliczeń na tej samej karcie: PPO 2,5 minuty; DQN 9,2 minuty; Dreamer 346 minut.">
+          <line class="rule" x1="86" y1="172" x2="410" y2="172"></line>
+          <text class="axis-note" x="86" y="190" text-anchor="start">0</text>
+          <text class="axis-note" x="410" y="190" text-anchor="end">346 min</text>
+
+          <g class="bar"><title>PPO: 2,5 minuty</title>
+            <text class="bar-label" x="24" y="24">PPO</text>
+            <rect x="86" y="32" width="3" height="22" rx="1.5" fill="var(--s-base)"></rect>
+            <text class="bar-value" x="97" y="48">2,5 min</text>
+          </g>
+          <g class="bar"><title>DQN: 9,2 minuty</title>
+            <text class="bar-label" x="24" y="78">DQN</text>
+            <rect x="86" y="86" width="9" height="22" rx="2" fill="var(--s-base)"></rect>
+            <text class="bar-value" x="103" y="102">9,2 min</text>
+          </g>
+          <g class="bar"><title>Dreamer: 346 minut</title>
+            <text class="bar-label" x="24" y="132">Dreamer · ten projekt</text>
+            <rect x="86" y="140" width="324" height="22" rx="4" fill="var(--s-agent)"></rect>
+            <text class="bar-value" x="400" y="156" text-anchor="end" style="fill: var(--card)">346 min</text>
+          </g>
+        </svg>
+        <figcaption>
+          Druga strona medalu, pokazana celowo: myślenie w wyobraźni jest drogie.
+          Ta sama karta graficzna liczyła ~140× dłużej niż przy PPO.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="prose">
+      <p>
+        To jest cała teza projektu w dwóch obrazkach. Model świata <strong>kupuje oszczędność
+        doświadczenia za czas obliczeń</strong>. Opłaca się wszędzie tam, gdzie prawdziwa próba
+        kosztuje więcej niż prąd — a prąd można dokupić.
+      </p>
+    </div>
+  </section>
+
+  <section class="prose">
+    <h2>Że to nie przypadek</h2>
+    <p>
+      Najmocniejszy dowód nie jest na wykresie powyżej, tylko w eksperymencie, który sprawdza
+      <em>przyczynę</em>. Jeśli agent naprawdę uczy się z wyobrażonych partii, to im więcej ich
+      rozegra przy tej samej liczbie prawdziwych ruchów, tym lepiej powinien grać. Pokrętło
+      odpowiadające dokładnie za to zostało przekręcone na trzech ustawieniach, po 3 losowe
+      starty każde, na klastrze A100:
+    </p>
+    <div class="stat-row">
+      <div class="stat"><b style="color: var(--ink-3)">−20,5</b><span>mało wyobraźni</span></div>
+      <div class="stat"><b style="color: var(--ink-2)">−11,9</b><span>średnio</span></div>
+      <div class="stat"><b style="color: var(--s-agent)">−6,1</b><span>dużo wyobraźni</span></div>
+    </div>
+    <p>
+      Przy najmniejszym ustawieniu agent nie nauczył się niczego — wszystkie trzy starty
+      zostały na poziomie losowego miotania paletką. Im więcej wyobrażonych partii, tym lepszy
+      wynik, mimo że prawdziwej gry było tyle samo. To odróżnia „uczy się z wyobraźni"
+      od „uczy się z czegoś innego, a wyobraźnia jest dekoracją".
+    </p>
+  </section>
+
+  <section class="fine">
+    <h3>Czego ten pokaz nie mówi</h3>
+    <ul>
+      <li>
+        Pokazany mecz to <strong>1 wygrana z 21 rozegranych</strong>. Agent gra z botem Atari
+        mniej więcej jak równy z równym i częściej przegrywa 4:5 niż wygrywa — wybrałem mecz
+        zwycięski, bo lepiej się go ogląda, ale wynik nie jest typowy.
+      </li>
+      <li>
+        Wyobraźnia widoczna w trybie „Z wyobraźnią" jest <strong>prawdziwa</strong> — to
+        dekodowana prognoza modelu z tego momentu gry. Ale agent nie zatrzymuje się tak
+        podczas grania: wyobraźnia służyła mu do <em>nauki</em>, w trakcie meczu działa już odruchem.
+      </li>
+      <li>
+        Porównanie z PPO i DQN opiera się na <strong>jednym uruchomieniu każdego</strong> —
+        to za mało na mocny wniosek i dlatego 3-krotne powtórzenie liczy się właśnie na klastrze.
+        Eksperyment z „pokrętłem wyobraźni" ma już po 3 starty na ustawienie.
+      </li>
+      <li>
+        Agent z wykresu startował z gotowym modelem świata i zużył łącznie ~110 tys. ruchów
+        wobec 100 tys. u PPO i DQN. Wersja ucząca się całkiem od zera dochodzi do −11,9.
+      </li>
+    </ul>
+    <p>
+      Cały kod, konfiguracje eksperymentów i pełny opis wyników wraz z tym, co jeszcze nie zostało
+      policzone, są w repozytorium projektu.
+    </p>
+  </section>
+</div>
+
+<script>
+  const DATA = __MATCH_DATA__;
+
+  const stage = document.getElementById("stage").getContext("2d");
+  const dream = document.getElementById("dream").getContext("2d");
+  stage.imageSmoothingEnabled = false;
+  dream.imageSmoothingEnabled = false;
+
+  const el = {
+    scoreA: document.getElementById("scoreA"),
+    scoreB: document.getElementById("scoreB"),
+    move: document.getElementById("rMove"),
+    step: document.getElementById("rStep"),
+    progress: document.getElementById("progress"),
+    badge: document.getElementById("dreamBadge"),
+    dreamShell: document.getElementById("dreamShell"),
+    dreamText: document.getElementById("dreamText"),
+    flash: document.getElementById("flash"),
+    play: document.getElementById("play"),
+    restart: document.getElementById("restart"),
+    mode1: document.getElementById("mode1"),
+    mode2: document.getElementById("mode2"),
+  };
+
+  const decode = (b64) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + b64;
+    return img;
+  };
+  const frames = DATA.frames.map(decode);
+  const dreams = DATA.branches.map((b) => ({ step: b.step, imgs: b.frames.map(decode) }));
+  const dreamAt = new Map(dreams.map((d) => [d.step, d]));
+
+  // Pong's 6 buttons collapse to three things a person can see the paddle do.
+  const MOVE = ["stoi", "stoi", "↑ w górę", "↓ w dół", "↑ w górę", "↓ w dół"];
+
+  const FPS = 22;
+  const DREAM_FPS = 7;
+  const PAUSE_AT_BRANCH = 2400; // ms the match holds while the dream plays
+
+  let idx = 0;
+  let playing = true;
+  let showDreams = true;
+  let acc = 0;
+  let last = performance.now();
+
+  let dreaming = null; // { imgs, until, t, acc }
+
+  function paintScore() {
+    const [a, b] = DATA.scores[Math.min(idx, DATA.scores.length - 1)];
+    el.scoreA.textContent = a;
+    el.scoreB.textContent = b;
+  }
+
+  function draw() {
+    const img = frames[idx];
+    if (img && img.complete) stage.drawImage(img, 0, 0, 64, 64);
+    el.step.textContent = idx;
+    el.move.textContent = idx > 0 ? MOVE[DATA.actions[idx - 1]] : "—";
+    el.progress.style.width = (100 * idx) / (frames.length - 1) + "%";
+  }
+
+  function startDream(branch) {
+    dreaming = { imgs: branch.imgs, until: performance.now() + PAUSE_AT_BRANCH, t: 0, acc: 0 };
+    el.dreamShell.classList.remove("idle");
+    el.badge.textContent = "przewiduje";
+    el.badge.classList.add("live");
+    el.dreamText.textContent =
+      "Mecz zatrzymany. Agent rozwija 15 kroków naprzód z tego, co widzi w tej chwili — " +
+      "obraz obok jest rysowany przez jego model gry, nie pobrany z emulatora.";
+  }
+
+  function endDream() {
+    dreaming = null;
+    el.dreamShell.classList.add("idle");
+    el.badge.textContent = "czeka";
+    el.badge.classList.remove("live");
+    el.dreamText.textContent =
+      "Co kilka sekund mecz staje, a agent rozwija w głowie 15 kroków naprzód — " +
+      "rysunek obok to jego prawdziwa prognoza, nie animacja.";
+  }
+
+  function advance() {
+    const prev = DATA.scores[idx];
+    idx += 1;
+    if (idx >= frames.length) { idx = frames.length - 1; playing = false; el.play.textContent = "Od nowa"; return; }
+    const now = DATA.scores[idx];
+    if (now[0] > prev[0]) {
+      el.flash.classList.remove("on");
+      void el.flash.offsetWidth;
+      el.flash.classList.add("on");
+    }
+    paintScore();
+    if (showDreams && dreamAt.has(idx)) startDream(dreamAt.get(idx));
+  }
+
+  function loop(now) {
+    const dt = now - last;
+    last = now;
+
+    if (dreaming) {
+      dreaming.acc += dt;
+      if (dreaming.acc > 1000 / DREAM_FPS) {
+        dreaming.acc = 0;
+        const img = dreaming.imgs[dreaming.t % dreaming.imgs.length];
+        if (img && img.complete) dream.drawImage(img, 0, 0, 64, 64);
+        dreaming.t += 1;
+      }
+      if (now > dreaming.until) endDream();
+    } else if (playing) {
+      acc += dt;
+      while (acc > 1000 / FPS) { acc -= 1000 / FPS; advance(); }
+      draw();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function setMode(withDreams) {
+    showDreams = withDreams;
+    el.mode1.setAttribute("aria-pressed", String(withDreams));
+    el.mode2.setAttribute("aria-pressed", String(!withDreams));
+    if (!withDreams) endDream();
+  }
+
+  function restart() {
+    idx = 0; acc = 0; playing = true;
+    endDream();
+    el.play.textContent = "Pauza";
+    paintScore(); draw();
+  }
+
+  el.mode1.addEventListener("click", () => setMode(true));
+  el.mode2.addEventListener("click", () => setMode(false));
+  el.restart.addEventListener("click", restart);
+  el.play.addEventListener("click", () => {
+    if (idx >= frames.length - 1) { restart(); return; }
+    playing = !playing;
+    el.play.textContent = playing ? "Pauza" : "Wznów";
+  });
+
+  frames[0].addEventListener("load", () => { paintScore(); draw(); }, { once: true });
+  paintScore();
+  requestAnimationFrame(loop);
+</script>
