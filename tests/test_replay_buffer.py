@@ -120,3 +120,27 @@ def test_save_load_roundtrip(tmp_path):
     for orig, new in zip(buf._episodes, loaded._episodes):
         for key in orig:
             np.testing.assert_array_equal(orig[key], new[key])
+
+
+def test_save_replaces_rather_than_merges_with_an_earlier_save(tmp_path):
+    """A second save must not leave the first save's extra episodes behind.
+
+    Files are numbered from the current queue, so a smaller buffer written
+    into the same directory used to leave higher-numbered episode_*.npz that
+    load() then read back as genuine episodes.
+    """
+    out = tmp_path / "buffer"
+    big = SequenceReplayBuffer(capacity=10_000, seed=0)
+    for length in (10, 20, 30, 40, 50):
+        big.add_episode(make_synthetic_episode(length, OBS_SHAPE))
+    big.save(out)
+    assert len(list(out.glob("episode_*.npz"))) == 5
+
+    small = SequenceReplayBuffer(capacity=10_000, seed=0)
+    for length in (11, 21):
+        small.add_episode(make_synthetic_episode(length, OBS_SHAPE))
+    small.save(out)
+
+    loaded = SequenceReplayBuffer.load(out, capacity=10_000, seed=0)
+    assert loaded.num_episodes == 2
+    assert loaded.num_steps == 32

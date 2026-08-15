@@ -6,7 +6,9 @@ For each requested group, draws mean+-std curves of the member variants and
 emits a table with:
   * final return  — mean +- std over seeds of each run's last-K episodes,
   * steps to threshold — env steps until the rolling return first reaches
-    the given fraction of the best variant's final return (n/a if never).
+    the given fraction of the best variant's final return (n/a if never),
+  * seeds reaching — how many seeds that step count actually averages, since
+    seeds that never cross the threshold contribute no step at all.
 
 Outputs: <root>/plots/ablation_<group>.png, ablation_<group>.md / .csv.
 
@@ -55,16 +57,26 @@ def final_return(runs, last_k: int = 10) -> tuple[float, float]:
     return float(np.mean(finals)), float(np.std(finals))
 
 
-def steps_to_threshold(runs, threshold: float, window: int = 10) -> float | None:
-    """Mean env steps at which the rolling return first reaches ``threshold``."""
+def steps_to_threshold(
+    runs, threshold: float, window: int = 10
+) -> tuple[float | None, int, int]:
+    """(mean env steps to reach ``threshold``, seeds that reached it, seeds total).
+
+    Only seeds that actually cross the threshold can contribute a step count,
+    so the mean is inherently conditional on reaching it. The two counts are
+    returned alongside it so callers report that coverage instead of
+    presenting a one-of-three-seeds number as if it described the variant.
+    """
     hits = []
     for run in runs:
         y = rolling(run["episode_return"], window)
+        if len(y) == 0:  # a run with no logged episodes
+            continue
         x = run["env_step"][len(run["env_step"]) - len(y):]
-        idx = np.argmax(y >= threshold)
+        idx = int(np.argmax(y >= threshold))
         if y[idx] >= threshold:
             hits.append(float(x[idx]))
-    return float(np.mean(hits)) if hits else None
+    return (float(np.mean(hits)) if hits else None), len(hits), len(runs)
 
 
 def summarize_group(
@@ -92,10 +104,14 @@ def summarize_group(
     floor = min(r["final_return_mean"] for r in rows)
     threshold = floor + threshold_frac * (best - floor)
     for row in rows:
-        s = steps_to_threshold(present[row["variant"]], threshold, window)
+        s, reached, total = steps_to_threshold(present[row["variant"]], threshold, window)
         row[f"steps_to_{int(threshold_frac * 100)}pct"] = (
             int(s) if s is not None else "n/a"
         )
+        # The step count above averages ONLY the seeds that crossed the
+        # threshold; without this column a variant where one lucky seed made
+        # it reads the same as one where every seed did.
+        row["seeds_reaching"] = f"{reached}/{total}"
 
     ax.set_xlabel("Environment steps (post action-repeat)")
     ax.set_ylabel(f"episode return (rolling mean {window}, mean ± std)")

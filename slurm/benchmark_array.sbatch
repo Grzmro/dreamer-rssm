@@ -9,14 +9,16 @@
 # Usage: sbatch slurm/benchmark_array.sbatch
 
 #SBATCH --job-name=dreamer-benchmark
-#SBATCH --account=plgXXXXXXX-gpu-a100      # <-- set to your PLGrid grant name
+#SBATCH --account=plglscclass26-gpu-a100
 #SBATCH --partition=plgrid-gpu-a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=40G
-#SBATCH --time=12:00:00
+# 400k steps at the measured rate (60k in 1:17 on an A100, Slurm 2806135)
+# is ~8.5 h for Dreamer alone, before PPO and DQN. 12 h left no margin.
+#SBATCH --time=24:00:00
 #SBATCH --array=0-2
 #SBATCH --output=%x-%A_%a.log
 

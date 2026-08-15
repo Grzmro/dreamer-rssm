@@ -27,6 +27,7 @@ from omegaconf import DictConfig
 
 from baselines.common import make_baseline_env
 from train.common_logger import BenchmarkLogger
+from train.seeding import seed_everything
 from train.train_world_model import resolve_device
 
 LOG_STD_MIN, LOG_STD_MAX = -5.0, 2.0
@@ -142,10 +143,10 @@ def train_sac(cfg: DictConfig, seed: int | None = None) -> None:
     s = b.sac
     seed = cfg.seed if seed is None else seed
     device = resolve_device(b.device)
-    torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
 
     env = make_baseline_env(cfg.env, b.frame_stack, b.grayscale)
+    seed_everything(seed, env)  # incl. env.action_space -> reproducible warm-up
     assert isinstance(env.action_space, gym.spaces.Box), "SAC needs continuous actions"
     obs_shape = env.observation_space.shape
     act_dim = int(np.prod(env.action_space.shape))

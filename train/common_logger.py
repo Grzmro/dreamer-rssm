@@ -65,11 +65,30 @@ class BenchmarkLogger:
 
 
 def load_run(path: str | Path) -> dict[str, np.ndarray]:
-    """Read one run CSV back into arrays (round-trip of BenchmarkLogger)."""
+    """Read one run CSV back into arrays (round-trip of BenchmarkLogger).
+
+    Raises if ``env_step`` ever goes backwards. Writing is append-mode by
+    design (a resumed run continues its own file), but a run RESTARTED from
+    scratch under the same agent/env/seed — a requeued or timed-out Slurm
+    task, or a run retried after run_benchmark caught its exception —
+    appends a second curve starting back at low env_step. The plotting code
+    feeds this column to np.interp, which does not check that its x values
+    increase and silently returns nonsense, so the corruption has to be
+    caught here rather than surfacing as a quietly wrong learning curve.
+    """
     with open(path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
+    env_step = np.array([int(r["env_step"]) for r in rows])
+    if len(env_step) > 1 and not np.all(np.diff(env_step) >= 0):
+        back = int(np.argmax(np.diff(env_step) < 0)) + 1
+        raise ValueError(
+            f"{path}: env_step goes backwards at row {back} "
+            f"({env_step[back - 1]} -> {env_step[back]}). This file holds more "
+            "than one run appended together; keep the run you want and remove "
+            "the other rows before plotting."
+        )
     return {
-        "env_step": np.array([int(r["env_step"]) for r in rows]),
+        "env_step": env_step,
         "wall_time_s": np.array([float(r["wall_time_s"]) for r in rows]),
         "episode_return": np.array([float(r["episode_return"]) for r in rows]),
         "episode_length": np.array([int(r["episode_length"]) for r in rows]),

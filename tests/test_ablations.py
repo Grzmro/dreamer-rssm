@@ -69,6 +69,31 @@ def test_reconstruction_free_forward_and_loss():
     assert enc_grad > 0  # encoder still gets gradient (via posterior -> reward/KL)
 
 
+def test_validation_survives_a_reconstruction_free_world_model():
+    """Phase 1 validation must not assume a decoder exists.
+
+    Regression: validate_reward_correlation read out["recon"] unconditionally,
+    so `train_world_model.py ablation=no_reconstruction` died with
+    KeyError: 'recon' at the first val_interval.
+    """
+    import math
+
+    from data.replay_buffer import SequenceReplayBuffer
+    from tests.conftest import make_synthetic_episode
+    from train.train_world_model import validate_reward_correlation
+
+    wm = WorldModel(3, A, discrete_actions=True, cfg=cfg(use_decoder=False))
+    buffer = SequenceReplayBuffer(capacity=1000, seed=0)
+    buffer.add_episode(make_synthetic_episode(L + 2))
+    val_cfg = OmegaConf.create(
+        {"train_wm": {"val_batches": 1}, "buffer": {"batch_size": B, "seq_len": L}}
+    )
+
+    r, recon_mse = validate_reward_correlation(wm, buffer, val_cfg, device="cpu")
+    assert math.isnan(recon_mse)  # no decoder -> nothing to score
+    assert isinstance(r, float)
+
+
 def test_default_config_still_reconstructs():
     wm = WorldModel(3, A, discrete_actions=True, cfg=cfg())
     out = wm(batch())

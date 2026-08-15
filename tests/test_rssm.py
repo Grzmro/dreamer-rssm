@@ -155,3 +155,17 @@ def test_kl_balancing_stop_gradients():
     loss.sum().backward()
     assert post_logits.grad.abs().sum() > 0
     assert prior_logits.grad is None or prior_logits.grad.abs().sum() == 0
+
+
+def test_stats_preserves_leading_dims():
+    """_stats must not collapse batch/time into one axis.
+
+    It is only ever called with 2-D input today, but view(-1, groups, classes)
+    would reshape a [B, L, ...] tensor into [B*L, ...] instead of failing —
+    an error that would surface as a silently misaligned KL rather than a
+    crash. unflatten keeps the leading dims.
+    """
+    rssm = make_rssm("categorical")
+    raw = torch.randn(B, L, 4 * 5)
+    assert rssm._stats(raw)["logits"].shape == (B, L, 4, 5)
+    assert rssm._stats(raw[0])["logits"].shape == (L, 4, 5)

@@ -13,7 +13,7 @@ training driven by a train ratio (see [Roadmap](#roadmap)).
 ## Repo structure
 
 ```
-envs/          # environment wrappers (64x64 resize, grayscale, action repeat, time limit, normalization)
+envs/          # environment wrappers (64x64 resize, grayscale, action repeat, time limit, normalization, [-1,1] action rescaling)
 data/          # sequential replay buffer (whole episodes, uint8, FIFO eviction)
 train/         # collection, world-model training, lambda-returns, imagination rollout, Dreamer loop
 models/        # world model (encoder/decoder/RSSM/heads) + actor, critic, AC losses, return normalizer
@@ -87,7 +87,8 @@ Architecture (see `models/README.md` for file-level details):
   an ablation via `model=rssm_gaussian`.
 - **Decoder**: mirror transposed CNN from `[h, z]` (1536-dim features); MSE
   reconstruction (unit-variance Gaussian — simplified vs full V3 likelihood).
-- **Heads**: reward (MSE; symlog + two-hot left as a documented TODO) and
+- **Heads**: reward (default **symlog + two-hot** cross-entropy over 255 bins,
+  V3-style; plain `mse` regression kept as `model.reward_head=mse`) and
   continue (BCE on `1 - terminated`; truncation is not treated as death).
 - **Loss**: `recon + reward + cont + kl`, all scales 1.0 by default;
   KL balancing 0.8/0.2 (V2) with free nats 1.0 (V3), applied per timestep
@@ -218,6 +219,14 @@ Deliberate protocol deviations (all documented, none silent):
    consistent with the Dreamer continue head.
 5. Replay capacity and learning-starts for DQN/SAC shrunk from CleanRL's
    1M-step defaults to the benchmark budget.
+6. Continuous action spaces are rescaled to `[-1, 1]^A` in the shared
+   wrapper chain (`envs/factory.py`), so every agent — and the replay
+   buffer — works in one action space. The Dreamer actor emits tanh output
+   in that range; without the rescaling an env with asymmetric bounds
+   (CarRacing: gas and brake in `[0, 1]`) silently clipped the action while
+   the buffer stored the unclipped value, training the world model on an
+   action that was never applied. PPO's clip and SAC's own scale/bias
+   become identities under this wrapper.
 
 ```bash
 # Everything on one env, shared budget, then comparison plots:
@@ -276,6 +285,19 @@ state reset, straight-through gradient flow to the encoder, closed-form KL
 values + free-nats floor + balancing stop-gradient direction, padding-mask
 correctness, and the continue-target/truncation distinction.
 
+Two groups are worth calling out because they cover claims the rest of the
+suite cannot:
+
+- `tests/test_step_accounting.py` — the benchmark's x-axis. The fractional
+  `train_ratio` accumulator fires exactly `floor(steps x ratio)` times, the
+  random→actor switch waits for an episode boundary, Dreamer consumes the
+  shared budget exactly (prefill included), and PPO rounds down to whole
+  rollout batches without ever overshooting.
+- `tests/test_learning.py` — that anything learns at all. Every other test
+  passes on a model that optimizes in the wrong direction; these two assert
+  the world model overfits a fixed batch and the critic converges to its
+  lambda-return target. Deliberately direction-only, seconds on CPU.
+
 ## Environments
 
 - **Atari (ALE)** — the main target, works out-of-the-box (`ale-py` >= 0.10 bundles the ROMs).
@@ -285,6 +307,26 @@ correctness, and the continue-target/truncation distinction.
   implemented but **untested in this environment** — `dm_control`/MuJoCo is not installed
   by default. Requires a local `pip install -e .[dmc]`; sample config:
   `configs/env/dmc_walker_walk.yaml` (`env=dmc_walker_walk`).
+
+## Reproducibility
+
+`seed` in the config determines a run end to end: `train/seeding.py` seeds
+Python, NumPy, torch **and `env.action_space`**, and every entry point calls
+it. The action space matters because Gymnasium's `env.reset(seed=...)` does
+not seed it, while random prefill (`train/collect.py`,
+`train/dreamer_loop.py`), DQN's epsilon-greedy and SAC's learning-starts all
+draw from `env.action_space.sample()` — before this, two runs with the same
+seed consumed different action sequences.
+
+```bash
+# Same seed -> byte-identical buffers:
+python train/collect.py collect.num_steps=400 seed=0 hydra.run.dir=/tmp/a
+python train/collect.py collect.num_steps=400 seed=0 hydra.run.dir=/tmp/b
+```
+
+Runs recorded in [RESULTS.md](RESULTS.md) predate this fix and are not
+reproducible step for step; they remain valid as across-seed variance
+samples. GPU nondeterminism (cuDNN kernel selection) is not addressed.
 
 ## Logging
 
@@ -351,12 +393,42 @@ GTX 1660 Ti (~1.2 joint updates/s), single seed.
    reached ~-6, and the final 10 episodes averaged **-1.7** with a best
    episode of **+1.0** — near-parity Pong within 1000-step (time-limited)
    episodes after 60k interactions.
-2. **Imagined returns track real returns**: Pearson r between the mean
-   imagined lambda-return at rollout start and the rolling real return =
-   **0.96** over 180 logged checkpoints; both curves turn upward together
-   (`experiments/dreamer_pong/dream_vs_real.png`). Imagination stays
-   mildly optimistic (~+0.004/step imagined vs ~-0.001/step real at the
-   end) — no runaway world-model exploitation observed.
+
+   **Read that number as a truncated score, not a finished game.** All of
+   the last 10 episodes ran into the 1000-step time limit (10/10), while
+   random-policy episodes end at ~850 steps because the opponent reaches 21
+   points first. So -1.7 is the point difference *when the clock ran out*;
+   it is not comparable to published Pong returns (DreamerV2 reaches ~+20
+   on games played to completion). Episode length is the cleaner signal
+   here, and it is unambiguous: the agent survives the full limit.
+2. **Imagined and real returns share a trend; step-to-step they do not
+   track**: Pearson r between the mean imagined lambda-return at rollout
+   start and the rolling real return, over 180 logged checkpoints
+   (all three printed by `viz/dream_vs_real.py`):
+
+   | pairing | r |
+   |---|---|
+   | raw | **+0.96** |
+   | after removing the linear trend in env_step | **+0.72** |
+   | on first differences (update to update) | **-0.01** |
+
+   The headline 0.96 is substantially a shared upward trend — both series
+   rise during a successful run. The detrended 0.72 is the honest measure of
+   co-movement, and the first-difference -0.01 says the imagined value does
+   *not* track real performance from one logged update to the next. The
+   curves turning upward together (`experiments/dreamer_pong/dream_vs_real.png`)
+   is a real signal; "the critic knows how well the policy is doing" is not
+   what this evidence supports.
+
+   **Imagination is optimistic, with the wrong sign.** At the end of
+   training the mean imagined lambda-return at rollout start is **+0.46**,
+   while the real policy scores -1.7 per 1000 steps = -0.0017/step, which
+   under gamma=0.99 implies a state value of about **-0.17** — an
+   overestimate of roughly **+0.63**. (A per-step decomposition of the
+   lambda-return is not well defined, since it folds in the bootstrap
+   V(s_H); comparing state values avoids that.) No runaway exploitation
+   was observed — the policy does improve — but the value scale is not
+   calibrated.
 3. **No gradient leaks**: unit tests assert every world-model parameter
    has zero/None grad after a full posterior -> rollout -> actor+critic
    backward step (both action types), and that the actor and critic never

@@ -66,7 +66,10 @@ def validate_reward_correlation(
 
     ``buffer`` should be a held-out validation buffer when available
     (train_wm.val_buffer_dir); it falls back to fresh windows from the
-    training buffer otherwise. Returns (pearson_r, recon_mse_per_pixel).
+    training buffer otherwise. Returns (pearson_r, recon_mse_per_pixel);
+    either may be nan — the correlation when a batch carries no reward
+    variance, the reconstruction MSE under the reconstruction-free ablation
+    (``model.use_decoder=false``), where there is nothing to decode.
     """
     wm.eval()
     preds, trues, recon_mses = [], [], []
@@ -76,13 +79,14 @@ def validate_reward_correlation(
         m = batch["mask"].bool()
         preds.append(out["reward_pred"][m].cpu())
         trues.append(batch["reward"][m].cpu())
-        per_px = ((out["recon"] - batch["obs"]).pow(2).mean(dim=(-3, -2, -1)))[m]
-        recon_mses.append(per_px.cpu())
+        if "recon" in out:
+            per_px = ((out["recon"] - batch["obs"]).pow(2).mean(dim=(-3, -2, -1)))[m]
+            recon_mses.append(per_px.cpu())
     wm.train()
 
     pred = torch.cat(preds).numpy()
     true = torch.cat(trues).numpy()
-    recon_mse = torch.cat(recon_mses).mean().item()
+    recon_mse = torch.cat(recon_mses).mean().item() if recon_mses else float("nan")
     if np.std(true) < 1e-8 or np.std(pred) < 1e-8:
         return float("nan"), recon_mse
     return float(np.corrcoef(pred, true)[0, 1]), recon_mse

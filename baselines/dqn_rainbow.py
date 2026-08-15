@@ -27,6 +27,7 @@ from omegaconf import DictConfig
 
 from baselines.common import make_baseline_env
 from train.common_logger import BenchmarkLogger
+from train.seeding import seed_everything
 from train.train_world_model import resolve_device
 
 
@@ -111,10 +112,10 @@ def train_dqn(cfg: DictConfig, seed: int | None = None) -> None:
     d = b.dqn
     seed = cfg.seed if seed is None else seed
     device = resolve_device(b.device)
-    torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
 
     env = make_baseline_env(cfg.env, b.frame_stack, b.grayscale)
+    seed_everything(seed, env)  # incl. env.action_space -> reproducible exploration
     assert isinstance(env.action_space, gym.spaces.Discrete), "DQN needs discrete actions"
     num_actions = int(env.action_space.n)
 

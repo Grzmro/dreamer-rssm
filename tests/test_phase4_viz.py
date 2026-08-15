@@ -42,9 +42,27 @@ def test_final_return_stats():
 
 def test_steps_to_threshold():
     run = fake_run(n=10, start=-10, end=-1, step=100)  # rolling window 1
-    s = steps_to_threshold([run], threshold=-5.0, window=1)
+    s, reached, total = steps_to_threshold([run], threshold=-5.0, window=1)
     assert s is not None and 500 <= s <= 700
-    assert steps_to_threshold([run], threshold=99.0, window=1) is None
+    assert (reached, total) == (1, 1)
+
+    s, reached, total = steps_to_threshold([run], threshold=99.0, window=1)
+    assert s is None and (reached, total) == (0, 1)
+
+
+def test_steps_to_threshold_reports_partial_seed_coverage():
+    """The mean covers only seeds that crossed; the counts must say so."""
+    reaches = fake_run(n=10, start=-10, end=-1, step=100)
+    never = [fake_run(n=10, start=-10, end=-9, step=100) for _ in range(2)]
+    s, reached, total = steps_to_threshold([reaches, *never], threshold=-5.0, window=1)
+    assert s is not None  # averaged over the single seed that made it
+    assert (reached, total) == (1, 3)
+
+
+def test_steps_to_threshold_ignores_runs_with_no_episodes():
+    empty = {k: np.array([]) for k in ("env_step", "episode_return")}
+    s, reached, total = steps_to_threshold([empty], threshold=0.0, window=10)
+    assert s is None and (reached, total) == (0, 1)
 
 
 def test_summarize_group_writes_outputs(tmp_path):
@@ -59,6 +77,9 @@ def test_summarize_group_writes_outputs(tmp_path):
     base = next(r for r in rows if r["variant"] == "dreamer")
     ablated = next(r for r in rows if r["variant"] == "dreamer-nofreenats")
     assert base["final_return_mean"] > ablated["final_return_mean"]
+    # Seed coverage of the steps-to-threshold column must be reported.
+    assert base["seeds_reaching"].endswith("/2")
+    assert "seeds_reaching" in (tmp_path / "ablation_loss_variants.md").read_text()
     for suffix in ("png", "md", "csv"):
         assert (tmp_path / f"ablation_loss_variants.{suffix}").exists()
 
@@ -66,3 +87,19 @@ def test_summarize_group_writes_outputs(tmp_path):
 def test_summarize_group_skips_single_variant(tmp_path):
     agents = {"dreamer": [fake_run()]}
     assert summarize_group("horizon", ["dreamer", "dreamer-H5"], agents, tmp_path) is None
+
+
+def test_agent_colors_separate_variants_within_a_family():
+    """Every "dreamer-*" ablation used to render in the same red."""
+    from viz.benchmark_comparison import agent_color
+
+    assert agent_color("dreamer") == "tab:red"
+    assert agent_color("dreamer-warmstart") == "tab:purple"  # exact key wins
+    assert agent_color("nonesuch") is None
+
+    variants = ["dreamer-tr0.1", "dreamer-tr1.0", "dreamer-ent1e-4", "dreamer-ent1e-3"]
+    colors = [agent_color(v) for v in variants]
+    assert len({tuple(c) for c in colors}) == len(variants)
+    assert all(c != "tab:red" for c in colors)
+    # Stable across calls/processes (hashlib, not the randomized builtin hash).
+    assert colors == [agent_color(v) for v in variants]

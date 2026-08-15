@@ -33,6 +33,7 @@ from models.world_model import WorldModel
 from train.collect import _finalize_episode, _new_episode
 from train.imagine_rollout import imagine_rollout
 from train.logger import make_logger
+from train.seeding import seed_everything
 from train.train_world_model import resolve_device
 
 
@@ -184,10 +185,9 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
     output_dir = Path(output_dir)
     td = cfg.train_dreamer
     device = resolve_device(td.device)
-    torch.manual_seed(cfg.seed)
-    np.random.seed(cfg.seed)
 
     env = make_env(cfg.env)
+    seed_everything(cfg.seed, env)  # incl. env.action_space -> reproducible prefill
     wm, actor, critic, target, action_type = build_models(cfg, env, device)
     if td.init_wm_ckpt:
         warm_start_world_model(wm, td.init_wm_ckpt, device)
@@ -269,7 +269,11 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
                 bench.log_episode(env_step, ep_return, ep_length)
             print(f"[dreamer] step {env_step:7d} | episode return {ep_return:8.2f} "
                   f"| avg10 {np.mean(recent_returns):8.2f} | updates {update}")
-            _, info = env.reset()
+            # The reset observation must be kept: it is both obs[0] of the new
+            # episode in the buffer AND the frame the policy builds its fresh
+            # belief state from. Dropping it made the actor pick the first
+            # action of every episode from the previous episode's last frame.
+            obs, info = env.reset()
             episode = _new_episode(info["raw_obs"], env.action_space)
             policy.reset()
             if env_step >= prefill_needed:

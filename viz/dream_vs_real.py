@@ -46,6 +46,33 @@ def rolling(x: np.ndarray, window: int) -> np.ndarray:
     return np.convolve(x, np.ones(w) / w, mode="valid")
 
 
+def correlations(real: np.ndarray, dream: np.ndarray, steps: np.ndarray) -> dict[str, float]:
+    """Pearson r between the two series, raw and with the time trend removed.
+
+    The raw number is easy to over-read: during a successful run both series
+    rise, so a large part of the correlation is a shared trend in env_step
+    rather than the world model tracking real performance. Reporting all
+    three keeps that distinction visible:
+
+      raw              — the headline number;
+      detrended        — after regressing each series on env_step, i.e. how
+                         much they co-move once the common trend is gone;
+      first-difference — do they move together from one logged update to the
+                         next (the strongest reading of "tracks").
+    """
+
+    def _detrend(y: np.ndarray) -> np.ndarray:
+        basis = np.vstack([steps, np.ones_like(steps)]).T
+        coef, *_ = np.linalg.lstsq(basis, y, rcond=None)
+        return y - basis @ coef
+
+    return {
+        "raw": float(np.corrcoef(real, dream)[0, 1]),
+        "detrended": float(np.corrcoef(_detrend(real), _detrend(dream))[0, 1]),
+        "first-difference": float(np.corrcoef(np.diff(real), np.diff(dream))[0, 1]),
+    }
+
+
 def dream_vs_real(run_dir: Path, out_path: Path, window: int = 10) -> None:
     episodes, updates = load_metrics(run_dir)
     if not episodes or not updates:
@@ -87,9 +114,9 @@ def dream_vs_real(run_dir: Path, out_path: Path, window: int = 10) -> None:
     if len(roll) >= 2:
         real_at_updates = np.interp(up_steps, roll_steps, roll)
         if np.std(real_at_updates) > 1e-8 and np.std(dream) > 1e-8:
-            r = float(np.corrcoef(real_at_updates, dream)[0, 1])
-            print(f"[dream_vs_real] Pearson r(real rolling, dream) = {r:.4f} "
-                  f"over {len(dream)} update records")
+            for label, value in correlations(real_at_updates, dream, up_steps).items():
+                print(f"[dream_vs_real] r ({label:<16}) = {value:+.4f} "
+                      f"over {len(dream)} update records")
         else:
             print("[dream_vs_real] correlation undefined (constant series)")
     print(f"[dream_vs_real] saved {out_path}")

@@ -155,9 +155,17 @@ class SequenceReplayBuffer:
         return batch
 
     def save(self, directory: str | Path) -> None:
-        """Save each episode as a compressed .npz file in ``directory``."""
+        """Save each episode as a compressed .npz file in ``directory``.
+
+        Existing ``episode_*.npz`` are removed first: files are numbered from
+        the current queue, so saving a buffer that has evicted episodes (or
+        any smaller buffer) into a directory from an earlier save would leave
+        higher-numbered files behind for ``load`` to pick up as real episodes.
+        """
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
+        for stale in directory.glob("episode_*.npz"):
+            stale.unlink()
         for i, ep in enumerate(self._episodes):
             np.savez_compressed(directory / f"episode_{i:06d}.npz", **ep)
 
