@@ -3,3 +3,21 @@ agents: [dreamer, ppo, dqn, sac]  # incompatible action spaces are skipped
 total_env_steps: 100000           # shared budget, post-action-repeat steps
 seeds: [0]                        # NOTE: 1 seed = methodologically weak;
                                   # use >= 3 for a real experiment
+
+# --- Wall-clock-matched comparison (the second axis; null = off) ---
+# The default protocol equalises SAMPLES and Dreamer wins. Setting a time
+# budget equalises SECONDS instead, which is the honest answer to "what should
+# I run on one GPU overnight" — and on Pong it is expected to favour the
+# baselines, since they step the env ~35-80x faster.
+#
+# time_budget_s is a HARD STOP, not a replacement for the step horizon:
+# schedules (PPO lr anneal, DQN epsilon) are computed from the planned step
+# count, so each agent still needs a target it can plausibly reach in the
+# budget. Set them per agent here; agents absent from the mapping fall back to
+# total_env_steps. Measured on an A100/Pong: dreamer ~11.8 steps/s, dqn
+# ~397/s, ppo ~980/s.
+#
+#   benchmark.time_budget_s=33840        # 9.4 h, matching the 400k Dreamer run
+#   "benchmark.agent_env_steps={dreamer: 400000, dqn: 13400000, ppo: 33000000}"
+time_budget_s: null
+agent_env_steps: null

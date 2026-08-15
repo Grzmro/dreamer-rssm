@@ -30,6 +30,7 @@ from models.critic import Critic, TargetCritic
 from models.losses import actor_loss, compute_lambda_targets, critic_loss
 from models.return_normalizer import ReturnNormalizer
 from models.world_model import WorldModel
+from train.budget import TrainingBudget
 from train.collect import _finalize_episode, _new_episode
 from train.imagine_rollout import imagine_rollout
 from train.logger import make_logger
@@ -245,7 +246,8 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
     accum = 0.0
     start_time = time.time()
 
-    while env_step < total_steps:
+    budget = TrainingBudget(total_steps, td.get("time_budget_s"))
+    while not budget.exhausted(env_step):
         action = policy(obs) if use_policy else env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
         episode["obs"].append(info["raw_obs"])
@@ -325,6 +327,7 @@ def train_dreamer(cfg: DictConfig, output_dir: str | Path | None = None):
         bench.close()
     mins = (time.time() - start_time) / 60
     print(f"[dreamer] done: {env_step} env steps, {update} updates in {mins:.1f} min")
+    print(f"[dreamer] budget: {budget.summary(env_step)}")
     print(f"[dreamer] final checkpoint: {final_path}")
     return final_path
 

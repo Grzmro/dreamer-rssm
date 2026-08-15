@@ -5,6 +5,7 @@ frame_stack: 4        # feedforward agents get the conventional Atari stack
 grayscale: true       # (Dreamer keeps RGB single frames + recurrent state)
 
 total_env_steps: 100000
+time_budget_s: null   # hard wall-clock stop; see configs/benchmark/default.yaml
 device: auto
 benchmark_dir: experiments/benchmark
 

@@ -204,6 +204,44 @@ designed to show — it is not something to hide or average away.** The
 reward-vs-wall-clock plot exists precisely to show the other side of the
 trade-off.
 
+#### The other budget: equal seconds instead of equal samples
+
+"Equal env steps" answers *how much does each agent squeeze out of a fixed
+number of frames*. It is not the same question as *what should I run on one
+GPU overnight*, and on Pong the two have opposite answers: at 400k steps
+Dreamer finishes at +9.6 while DQN sits at −7.9, but Dreamer took 9.4 h to
+DQN's 17 min, so an equal-wall-clock budget hands DQN roughly 13M steps
+instead of 400k.
+
+`benchmark.time_budget_s` runs that second comparison. It is a **hard stop
+layered on top of a planned step horizon, never a replacement for it**:
+PPO anneals its learning rate over the planned iteration count and DQN
+decays epsilon over `exploration_fraction * total_env_steps`, so removing
+the horizon would silently stretch both schedules and the experiment would
+measure the mangled schedule rather than the algorithm. Each agent therefore
+gets a step target it can plausibly reach within the budget, via
+`benchmark.agent_env_steps`, and the timer only guarantees nobody gets more
+seconds than anybody else.
+
+```bash
+# 9.4 h each — the wall-clock of the recorded 400k Dreamer run.
+# Targets sized from measured A100 throughput: dreamer ~11.8 steps/s,
+# dqn ~397/s, ppo ~980/s.
+python train/run_benchmark.py benchmark.time_budget_s=33840 \
+    "benchmark.agent_env_steps={dreamer: 400000, dqn: 13400000, ppo: 33000000}"
+```
+
+Every run prints which limit stopped it. A time-matched run that stops on
+*steps* did not spend its budget (the target was too small) and a
+step-matched run that stops on *time* was truncated; both make the
+comparison unequal, so `train/budget.py` reports them explicitly instead of
+leaving it to be inferred from the CSV. Comparability still depends on all
+agents running on the same GPU — a wall-clock axis is only meaningful within
+one machine, which is why the benchmark runs them sequentially on one node.
+
+Report both axes. Sample-matched alone flatters Dreamer; time-matched alone
+flatters the baselines; the pair is the actual finding.
+
 Deliberate protocol deviations (all documented, none silent):
 
 1. Feedforward baselines get **grayscale + 4-frame channel stack** (the

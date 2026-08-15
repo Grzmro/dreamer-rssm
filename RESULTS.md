@@ -282,13 +282,44 @@ imagination training drives learning, and this is the experiment that tests
    inconclusive because base Dreamer is also at the floor there. Only the
    ablation arm needs GPU time; the §B base is the control. Command and
    revised pre-registered hypothesis in §C.1. ≈ 8 A100-h.
-2. Horizon ablations (C) — §D found no open-loop degeneration through H=40,
+2. **Wall-clock-matched benchmark (B)** — the same comparison with equal
+   *seconds* instead of equal samples, which is the budget that actually
+   applies when one GPU is the constraint. Infrastructure landed 2026-08-15
+   (`benchmark.time_budget_s` + `benchmark.agent_env_steps`,
+   `train/budget.py`, README "The other budget").
+
+   **Only the baselines need GPU time.** Dreamer's recorded 400k run already
+   spans 9.4 h and its CSV carries `wall_time_s`, so its return at any budget
+   T ≤ 9.4 h is obtained by truncating on that column — no re-run.
+
+   Start at T = 2 h (≈ 12 A100-h: 2 agents × 3 seeds × 2 h), not at the full
+   9.4 h (≈ 56 A100-h). At 2 h DQN gets ~2.9M steps and PPO ~7M against
+   Dreamer's ~85k, which is already a 30-80× sample advantage; if the
+   baselines win there, the longer budget can only widen it and need not be
+   run at all.
+
+   ```bash
+   ENV=atari_pong sbatch --time=8:00:00 --export=ALL,ENV slurm/benchmark.sbatch
+   # with, inside the script or as overrides:
+   #   benchmark.time_budget_s=7200
+   #   "benchmark.agents=[ppo,dqn]"
+   #   "benchmark.agent_env_steps={dqn: 2900000, ppo: 7000000}"
+   ```
+
+   Pre-registered expectation, written before the run: **the baselines win.**
+   PPO and DQN both solve Pong given millions of frames, and 2 h buys them
+   that. The interesting number is not who wins but the crossover — the
+   wall-clock at which Dreamer's curve stops being ahead — and whether
+   Dreamer's advantage survives at all once the axis is seconds. A result
+   where Dreamer still leads at equal time would be surprising and would
+   need checking for a throughput bug before being believed.
+3. Horizon ablations (C) — §D found no open-loop degeneration through H=40,
    so H=20 ≈ H=15 is the prediction; H=5 should hurt credit assignment.
    Same budget correction applies: run at ≥ 100k, not 30k.
-3. Remaining ablation groups (C), likewise at ≥ 100k. Note this raises the
+4. Remaining ablation groups (C), likewise at ≥ 100k. Note this raises the
    full-matrix cost well above the ≈ 5 A100-h quoted below, which assumed
    30k — budget ≈ 8 A100-h per preset at 150k × 3 seeds.
-4. Ladder step 3: Breakout/MsPacman, then CarRacing (Dreamer continuous +
+5. Ladder step 3: Breakout/MsPacman, then CarRacing (Dreamer continuous +
    SAC + PPO) with fewer seeds; CarRacing videos afterwards. Both are
    unblocked as of 2026-08-15:
    - the benchmark scripts take `ENV` from the environment, so a second game

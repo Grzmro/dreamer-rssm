@@ -10,9 +10,21 @@ The Dreamer entry runs FROM SCRATCH (no warm start, no preloaded buffer):
 its random prefill counts on the shared env-step axis like every other
 agent's warm-up — samples consumed are samples consumed.
 
+Two comparisons are supported and they answer different questions:
+
+* **sample-matched** (default) — one shared ``total_env_steps`` for everybody.
+  Dreamer is expected to win; this is the claim the README makes.
+* **wall-clock-matched** — set ``benchmark.time_budget_s`` and give each agent
+  a step target it can plausibly reach in that time via
+  ``benchmark.agent_env_steps``. Every agent then gets the same seconds on the
+  same GPU, and on Pong the baselines are expected to win because they step
+  the env ~35-80x faster. Report both; neither one alone is the whole story.
+
 Usage:
     python train/run_benchmark.py benchmark.total_env_steps=100000
     python train/run_benchmark.py env=carracing "benchmark.agents=[dreamer,ppo,sac]"
+    python train/run_benchmark.py benchmark.time_budget_s=33840 \
+        "benchmark.agent_env_steps={dreamer: 400000, dqn: 13400000, ppo: 33000000}"
 """
 
 from __future__ import annotations
@@ -43,9 +55,17 @@ def run_benchmark(cfg: DictConfig) -> None:
                 print(f"[benchmark] skip sac (discrete action space)")
                 continue
             run_cfg = OmegaConf.merge(cfg, {"seed": int(seed)})
-            run_cfg.baselines.total_env_steps = int(bench.total_env_steps)
+            steps = _agent_steps(bench, agent)
+            run_cfg.baselines.total_env_steps = steps
+            budget_s = bench.get("time_budget_s")
+            run_cfg.baselines.time_budget_s = budget_s
+            run_cfg.train_dreamer.time_budget_s = budget_s
+            budget_note = (
+                "" if budget_s is None
+                else f", wall-clock cap {_fmt_duration(float(budget_s))}"
+            )
             print(f"\n[benchmark] === {agent} seed {seed} on {cfg.env.name} "
-                  f"({bench.total_env_steps} env steps) ===")
+                  f"({steps} env steps{budget_note}) ===")
             start = time.time()
             try:
                 _run_agent(agent, run_cfg, root, seed)
@@ -57,6 +77,29 @@ def run_benchmark(cfg: DictConfig) -> None:
     from viz.benchmark_comparison import make_plots
 
     make_plots(root)
+
+
+def _fmt_duration(seconds: float) -> str:
+    if seconds < 90:
+        return f"{seconds:.0f} s"
+    if seconds < 5400:
+        return f"{seconds / 60:.1f} min"
+    return f"{seconds / 3600:.1f} h"
+
+
+def _agent_steps(bench: DictConfig, agent: str) -> int:
+    """Planned step horizon for ``agent`` — per-agent override or the shared one.
+
+    Only meaningful together with ``time_budget_s``: in a wall-clock-matched
+    sweep each agent needs a different step target, because the point is that
+    they consume env steps at wildly different rates. Without a time budget
+    this returns the one shared budget for everybody, i.e. the sample-matched
+    protocol is unchanged.
+    """
+    per_agent = bench.get("agent_env_steps")
+    if per_agent is not None and agent in per_agent:
+        return int(per_agent[agent])
+    return int(bench.total_env_steps)
 
 
 def _run_agent(agent: str, cfg: DictConfig, root: Path, seed: int) -> None:

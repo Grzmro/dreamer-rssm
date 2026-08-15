@@ -1,6 +1,7 @@
 # Full Dreamer loop (Phase 2): collect with the actor <-> train WM + actor-critic.
 total_env_steps: 100000   # env steps AFTER prefill (with action_repeat 4 = 400k frames)
 prefill_steps: 5000       # random-policy steps before any training
+time_budget_s: null       # hard wall-clock stop; see configs/benchmark/default.yaml
 buffer_dir: null          # preload a saved buffer (counts toward/replaces prefill)
 init_wm_ckpt: null        # warm-start the world model from a Phase 1 checkpoint
 

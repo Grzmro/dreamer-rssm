@@ -26,6 +26,7 @@ import torch.nn as nn
 from omegaconf import DictConfig
 
 from baselines.common import make_baseline_env
+from train.budget import TrainingBudget
 from train.common_logger import BenchmarkLogger
 from train.seeding import seed_everything
 from train.train_world_model import resolve_device
@@ -138,7 +139,11 @@ def train_dqn(cfg: DictConfig, seed: int | None = None) -> None:
     obs, _ = env.reset(seed=seed)
     print(f"[dqn] device={device} total_steps={total_steps} "
           f"double={bool(d.double)} dueling={bool(d.dueling)}")
+    budget = TrainingBudget(total_steps, b.get("time_budget_s"))
     for global_step in range(1, total_steps + 1):
+        if budget.out_of_time():
+            global_step -= 1  # this step never ran
+            break
         eps = linear_schedule(d.start_e, d.end_e, explore_steps, global_step)
         if rng.random() < eps:
             action = env.action_space.sample()
@@ -184,8 +189,9 @@ def train_dqn(cfg: DictConfig, seed: int | None = None) -> None:
 
     env.close()
     bench.close()
-    print(f"[dqn] done: {total_steps} env steps, {n_episodes} episodes "
+    print(f"[dqn] done: {global_step} env steps, {n_episodes} episodes "
           f"in {(time.time() - start_time) / 60:.1f} min -> {bench.path}")
+    print(f"[dqn] budget: {budget.summary(global_step)}")
 
 
 @hydra.main(config_path="../configs", config_name="config", version_base="1.3")

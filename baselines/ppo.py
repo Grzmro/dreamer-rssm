@@ -24,6 +24,7 @@ from omegaconf import DictConfig
 from torch.distributions import Categorical, Normal
 
 from baselines.common import make_baseline_env
+from train.budget import TrainingBudget
 from train.common_logger import BenchmarkLogger
 from train.seeding import seed_everything
 from train.train_world_model import resolve_device
@@ -143,8 +144,11 @@ def train_ppo(cfg: DictConfig, seed: int | None = None) -> None:
     next_done = torch.zeros(num_envs, device=device)
     n_episodes = 0
 
+    budget = TrainingBudget(total_steps, b.get("time_budget_s"))
     print(f"[ppo] device={device} iterations={num_iterations} batch={batch_size}")
     for iteration in range(1, num_iterations + 1):
+        if budget.out_of_time():
+            break
         if p.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / num_iterations
             optimizer.param_groups[0]["lr"] = frac * p.lr
@@ -256,6 +260,7 @@ def train_ppo(cfg: DictConfig, seed: int | None = None) -> None:
     bench.close()
     print(f"[ppo] done: {global_step} env steps, {n_episodes} episodes "
           f"in {(time.time() - start_time) / 60:.1f} min -> {bench.path}")
+    print(f"[ppo] budget: {budget.summary(global_step)}")
 
 
 @hydra.main(config_path="../configs", config_name="config", version_base="1.3")
