@@ -7,6 +7,10 @@
 # script produced them.
 #
 # Usage: sbatch slurm/benchmark_array.sbatch
+#        ENV=atari_breakout sbatch --export=ALL,ENV slurm/benchmark_array.sbatch
+#
+# ENV is a config group name from configs/env/ (atari_pong, atari_breakout,
+# carracing). Each env writes to its own experiments/benchmark/<env>/ tree.
 
 #SBATCH --job-name=dreamer-benchmark
 #SBATCH --account=plglscclass26-gpu-a100
@@ -29,9 +33,14 @@ export SDL_VIDEODRIVER=dummy
 
 cd "${SCRATCH}/dreamer-rssm"
 
+ENV="${ENV:-atari_pong}"
+STEPS="${STEPS:-400000}"
+echo "[sbatch] env=${ENV} steps=${STEPS} seed=${SLURM_ARRAY_TASK_ID}"
+
 RUN_DIR="${SCRATCH}/dreamer-rssm/experiments/athena_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 python train/run_benchmark.py \
-    benchmark.total_env_steps=400000 \
+    "env=${ENV}" \
+    "benchmark.total_env_steps=${STEPS}" \
     "benchmark.seeds=[${SLURM_ARRAY_TASK_ID}]" \
     baselines.benchmark_dir="${SCRATCH}/dreamer-rssm/experiments/benchmark" \
     hydra.run.dir="${RUN_DIR}"

@@ -4,6 +4,12 @@
 # Usage:
 #   sbatch slurm/benchmark.sbatch
 #   sbatch --time=24:00:00 slurm/benchmark.sbatch      # override walltime
+#   ENV=atari_breakout STEPS=400000 SEEDS='[0,1,2]' \
+#       sbatch --export=ALL,ENV,STEPS,SEEDS slurm/benchmark.sbatch
+#
+# ENV is a config group name from configs/env/ (atari_pong, atari_breakout,
+# carracing). Each env writes to its own experiments/benchmark/<env>/ tree, so
+# a second game cannot append into the first one's CSVs.
 #
 # Check status from a phone SSH session:
 #   squeue --me
@@ -27,10 +33,16 @@ export SDL_VIDEODRIVER=dummy   # headless Box2D (CarRacing), harmless for Atari
 
 cd "${SCRATCH}/dreamer-rssm"
 
+ENV="${ENV:-atari_pong}"
+STEPS="${STEPS:-400000}"
+SEEDS="${SEEDS:-[0]}"
+echo "[sbatch] env=${ENV} steps=${STEPS} seeds=${SEEDS}"
+
 RUN_DIR="${SCRATCH}/dreamer-rssm/experiments/athena_${SLURM_JOB_ID}"
 python train/run_benchmark.py \
-    benchmark.total_env_steps=400000 \
-    "benchmark.seeds=[0]" \
+    "env=${ENV}" \
+    "benchmark.total_env_steps=${STEPS}" \
+    "benchmark.seeds=${SEEDS}" \
     baselines.benchmark_dir="${SCRATCH}/dreamer-rssm/experiments/benchmark" \
     hydra.run.dir="${RUN_DIR}"
 
