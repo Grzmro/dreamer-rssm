@@ -1,12 +1,13 @@
 # Results & experiment status (Phase 4)
 
-Status date: 2026-08-09. **Local training is paused at the user's
-request**; the one training-time study run so far — the Phase 4E
-parametric sweep (§E) — was executed remotely on Cyfronet Athena on
-2026-07-20. This file records what has been run, what every deferred
-experiment costs, and the exact commands to finish the plan (locally or on
-Cyfronet Athena via `slurm/`). Nothing below is silently skipped: every gap
-is listed in [Deferred work](#deferred-work).
+Status date: 2026-08-15. **Local training is paused at the user's request**;
+every training-time study was executed remotely on Cyfronet Athena. Three
+campaigns have run: the Phase 4E parametric sweep (§E, 2026-07-20), the
+full 400k benchmark (§B, 2026-08-10) and the `no_reconstruction` ablation
+with its base control (§C, 2026-08-15). This file records what has been
+run, what every deferred experiment costs, and the exact commands to finish
+the plan (locally or on Cyfronet Athena via `slurm/`). Nothing below is
+silently skipped: every gap is listed in [Deferred work](#deferred-work).
 
 Revised 2026-08-09 after an audit of the recorded runs, with no new training:
 the dream-vs-real correlation is now reported detrended as well as raw (§E,
@@ -20,9 +21,9 @@ results below.
 | # | environment | actions | obs | status | approx. cost (GTX 1660 Ti) |
 |---|---|---|---|---|---|
 | 1 | CartPole-v1 (vector) | discrete | state | **skipped — decision**: Phases 0–2 were validated directly on Pong; a vector-obs sanity env would bypass the pixel encoder/decoder entirely, testing little of this architecture | — |
-| 2 | ALE/Pong-v5 | discrete | pixels 64×64 | **validated** (Phases 1–2 full runs: WM criteria + reward −21 → −1.7) | WM-only 10k updates ≈ 75 min; full Dreamer 60k steps ≈ 4.2 h |
-| 3a | Atari Breakout / MsPacman | discrete | pixels | **deferred** (no training allowed now); configs exist (`env=atari_breakout`) or are one YAML away | ≈ 4–6 h each per seed |
-| 3b | CarRacing-v3 | continuous | pixels | **deferred**; env verified working (Box2D present), Dreamer continuous branch + SAC/PPO smoke-tested on it; run LAST (long episodes) | ≈ 6–10 h per seed |
+| 2 | ALE/Pong-v5 | discrete | pixels 64×64 | **validated** (Phases 1–2 full runs; benchmarked to 400k × 3 seeds, final +9.6 ± 1.0 — §B) | WM-only 10k updates ≈ 75 min; full Dreamer 60k steps ≈ 4.2 h; 400k ≈ 9.4 h on an A100 |
+| 3a | Atari Breakout / MsPacman | discrete | pixels | **ready to launch** on Athena (`ENV=atari_breakout`); no local training | ≈ 4–6 h each per seed |
+| 3b | CarRacing-v3 | continuous | pixels | **ready to launch** on Athena — Box2D installed and `CarRacing-v3` verified there 2026-08-15; Dreamer continuous branch + SAC/PPO smoke-tested; run LAST (long episodes) | ≈ 6–10 h per seed |
 | — | dm_control (walker, cartpole) | continuous | pixels | **unavailable in this sandbox** (`dm_control` not installed); adapter exists (`envs/dmc.py`), untested | — |
 
 Ladder rule respected: nothing was launched on step-3 environments; step 2
@@ -35,39 +36,68 @@ single sandbox GPU rules out parallel runs; wall-clock limitation, not
 correctness), `viz/learning_curves.py` (mean ± std across seeds on a shared
 env-step grid).
 
-**What exists today (single seed, from Phase 3 — see README "Benchmark
-results")**: Dreamer-warmstart reaches −1.7 on Pong while PPO/DQN stay at
-the −21 random floor for the whole 100k-step budget; wall-clock order is
-reversed (2.7 / 9.2 min vs 249 min). 1 seed = methodologically weak;
-treat as direction, not effect size.
+**Done — 400k env steps, 3 seeds, all three discrete agents.** Cyfronet
+Athena, Slurm array 2887185 (3×A100, one seed per task, 2026-08-10),
+revision `ef90d98` — i.e. *after* the reset-observation and seeding fixes.
+Final return is the mean over each run's last 10 episodes, then mean ± std
+across seeds.
 
-**To finish (exact commands)**:
+| agent | final return | per seed | wall-clock (mean/seed) |
+|---|---|---|---|
+| **dreamer** | **+9.6 ± 1.0** | 10.4 / 8.2 / 10.2 | 9.4 h |
+| dqn (double+dueling) | −7.9 ± 2.2 | −11.0 / −6.9 / −5.9 | 17 min |
+| ppo | −19.9 ± 0.8 | −18.8 / −20.3 / −20.7 | 7 min |
 
-```bash
-# Pong, 3 seeds, Dreamer + both discrete baselines (~14 h GPU on 1660 Ti,
-# ~2-3 h on an A100):
-python experiments/run_seeds.py "benchmark.seeds=[0,1,2]" \
-    "benchmark.agents=[dreamer,ppo,dqn]" benchmark.total_env_steps=100000
-python viz/learning_curves.py
-```
+Dreamer is the only agent that reaches a positive score, and it does so on
+all three seeds; PPO never leaves the random floor within the budget. The
+wall-clock order is reversed by roughly the same factor it always was —
+Dreamer costs ~33× DQN and ~83× PPO. Both axes are the point: sample
+efficiency is won, wall-clock is lost, and averaging the two together would
+erase the finding.
 
-Priority if budget is short (per the Phase 4 spec): Dreamer full seeds
-first, baselines at ≥ 2 seeds, annotate any reduction here.
+**The one-in-three floor failure documented in §E does not appear at this
+budget.** At 60k the base configuration had one seed stuck at −20.8; here
+the worst seed finishes at +8.2. Read together with the truncation table
+below, the failure at 60k looks like *not yet started* rather than
+*permanently stuck* — learning on Pong begins somewhere between 30k and
+60k steps and the seeds reach it at different times.
+
+Base run truncated at increasing budgets (same three seeds, same run):
+
+| budget | return | per seed |
+|---|---|---|
+| 20–30k | −20.4 ± 0.4 | −20.5 / −19.9 / −20.8 |
+| 50–60k | −9.5 ± 2.7 | −5.6 / −11.3 / −11.5 |
+| 90–100k | −3.8 ± 1.8 | −4.4 / −1.4 / −5.7 |
+| 140–150k | +4.4 ± 5.1 | 11.6 / 0.9 / 0.7 |
+| 190–200k | +7.0 ± 3.1 | 11.2 / 3.6 / 6.3 |
+
+This table is load-bearing for §C: **nothing has happened yet at 30k**, so
+that budget cannot discriminate between architecture variants.
+
+Artifacts: `experiments/benchmark/ALE_Pong-v5_bench400k_20260810/*.csv`
+(9 runs) and `experiments/benchmark/plots/ALE_Pong-v5_bench400k_20260810_*.png`
+(learning curves, env-step and wall-clock axes).
 
 ## C. Ablations
 
 All ablations are single-Hydra-override presets (`configs/ablation/`),
 each self-labels its benchmark CSV (`dreamer-H5`, `dreamer-nofreenats`,
-...). Representative env: **Pong** (ladder step 2). Suggested budget:
-30k env steps, 2 seeds per variant (a deliberate compromise vs 3–5 in
-Part B — more variants, fewer seeds). ~2 h/run on the 1660 Ti, ~25 min on
-an A100 ⇒ full matrix ≈ 22 GPU-h (1660 Ti) / ≈ 5 GPU-h (A100).
+...). Representative env: **Pong** (ladder step 2).
+
+**The 30k budget originally suggested here is dead — see the result below.
+Use ≥ 100k.** Base Dreamer is still at the random floor at 30k (§B), so at
+that budget every variant scores −20-something and the comparison measures
+nothing. The revised figure is ~1.1 min per 1k env steps per seed on an
+A100, i.e. ≈ 2.8 h per seed at 150k, ≈ 8 h for three seeds — which does not
+fit the 6 h walltime in `slurm/ablations.sbatch`, so pass
+`--time=12:00:00` or split seeds across array tasks.
 
 | group | variants (preset) | run status | expected / hypothesis (to verify) |
 |---|---|---|---|
 | horizon | `horizon_5`, `horizon_10`, base H=15, `horizon_20` | **deferred** | short H → weaker credit assignment; H=20 ≈ 15 given open-loop stays coherent ≥ 40 steps |
 | latent size | `deter_128`, `deter_256`, base 512; `stoch_16x16`, base 32×32, `stoch_32x64` | **deferred** | Pong is simple: expect mild degradation only at 128 |
-| loss variants | `no_kl_balance`, `no_free_nats`, `no_reconstruction`, base | **deferred** (mandatory: `no_reconstruction`) | no free nats → KL→0 collapse early; reconstruction-free → unstable/much worse given the Phase 1 finding that reward gradient alone failed to shape features (probe AUC 0.49) |
+| loss variants | `no_kl_balance`, `no_free_nats`, `no_reconstruction`, base | `no_reconstruction` **run at 30k — inconclusive** (below); `no_kl_balance`/`no_free_nats` deferred | no free nats → KL→0 collapse early; reconstruction-free → unstable/much worse given the Phase 1 finding that reward gradient alone failed to shape features (probe AUC 0.49) |
 | latent type | base categorical vs `gaussian_latent` | **deferred** | V2 finding: categorical better on Atari |
 
 ```bash
@@ -82,6 +112,61 @@ Note: the reconstruction-free preset genuinely removes the decoder
 (no parameters, no forward, no gradient — `models/world_model.py`), so it
 is a compute ablation, not a loss-weight-zero imitation. Verified by unit
 tests (`tests/test_ablations.py`).
+
+### C.1 `no_reconstruction` at 30k — inconclusive, and why that matters
+
+Cyfronet Athena, Slurm array 2909563 (2×A100, 2026-08-15), 30k env steps,
+3 seeds, revision `4ee3da4`. The base run (array task 0) was launched in
+the same array, on the same budget, seeds and revision, precisely so the
+ablation had a control.
+
+| variant | final return | per seed | wall-clock (mean/seed) |
+|---|---|---|---|
+| base (decoder present) | −20.8 ± 0.1 | −20.7 / −20.9 / −20.9 | 33 min |
+| `no_reconstruction` | −20.2 ± 0.3 | −19.8 / −20.4 / −20.3 | 32 min |
+
+**Both arms are at the random floor, so the experiment does not
+discriminate.** Removing the decoder cannot be shown to hurt a run that has
+not started learning either way — §B puts the onset of learning on Pong
+between 30k and 60k steps, and an independent measurement agrees: the base
+curve from the 400k benchmark, truncated to 20–30k, gives −20.4 ± 0.4
+against −20.8 ± 0.1 measured here in a separate run.
+
+The pre-registered criterion was *"final return worse than −18 on 2 seeds
+at 30k"*. `no_reconstruction` satisfies it at −20.2 — **and so does the
+base at −20.8.** Had the ablation been launched alone, as this file
+previously instructed (`sbatch --array=10`), the recorded outcome would
+have been a confirmed hypothesis and a false claim that the pixel loss is
+load-bearing. The control is the only reason that did not happen. The
+criterion was underspecified, not merely unlucky: a threshold on absolute
+return is meaningless without knowing where the control sits.
+
+Two further cautions about this table. The `steps_to_90pct` column in
+`ablation_loss_variants.md` (9.6k vs 12.6k) is noise — the group's
+worst-to-best span is 0.7 points, so the 90% threshold falls inside
+seed variance. And the near-identical wall-clock (32 vs 33 min) is itself
+informative: at this scale the decoder is not what makes training slow, so
+a reconstruction-free variant buys almost no compute back.
+
+**Redesigned test.** No new base run is needed — the 400k benchmark base
+(§B) is a valid control at any budget ≤ 400k: same revision for training
+purposes, same three seeds, and verified consistent with a separate base
+run at 30k. So only the ablation arm has to be re-run, at a budget where
+the control is clearly learning:
+
+```bash
+# ~8 h for 3 seeds on one A100; compare against the §B base truncated to 150k
+SEEDS='[0,1,2]' STEPS=150000 sbatch --time=12:00:00 \
+    --export=ALL,SEEDS,STEPS --array=10 slurm/ablations.sbatch
+```
+
+Revised hypothesis, registered before that run: at 150k the base reaches
++4.4 ± 5.1, so a load-bearing pixel loss should leave `no_reconstruction`
+below −15, and anything above roughly −5 falsifies the claim that
+reconstruction is what shapes the representation the policy uses.
+
+Artifacts: `experiments/benchmark/ALE_Pong-v5_norecon_20260815/*.csv`,
+`experiments/benchmark/plots/ablation_loss_variants.{png,md,csv}`.
 
 ## D. Visual artifacts (generated from the Phase 2 checkpoint, inference only)
 
@@ -183,41 +268,43 @@ Still prepared but not yet run:
 
 | study | presets | script |
 |---|---|---|
-| architecture/loss ablations | `configs/ablation/*` (11 presets) | `slurm/ablations.sbatch` |
+| architecture/loss ablations | `configs/ablation/*` (10 presets still open; `no_reconstruction` ran but was inconclusive at 30k — §C.1) | `slurm/ablations.sbatch` |
 
 ## Deferred work
 
-In priority order, everything runnable as-is. Position 1 has been promoted
-above the multi-seed curves: the train_ratio dose-response (§E) already shows
-that imagination training is what drives learning, and `no_reconstruction` is
-the one remaining experiment that tests *why* — whether the pixel loss is
-load-bearing for the representation the policy learns from.
+In priority order, everything runnable as-is. Multi-seed Pong curves (B) are
+done as of 2026-08-10 and have dropped off this list. Position 1 is still the
+`no_reconstruction` question — the train_ratio dose-response (§E) shows that
+imagination training drives learning, and this is the experiment that tests
+*why* — but it now needs a budget at which the control is awake.
 
-1. **`no_reconstruction` ablation (C)** — the single most informative run
-   left. Pre-registered hypothesis, written down before launching:
-
-   > Removing the decoder collapses Pong learning to near the random floor
-   > (final return worse than −18 on 2 seeds at 30k steps), because reward
-   > and continue signals alone are too sparse to shape the latent. The
-   > Phase 1 evidence for this is direct: with the plain MSE reward head the
-   > representation never encoded scoring events (probe AUC 0.49) until the
-   > reconstruction gradient was rebalanced.
-   >
-   > Decisive either way. If it collapses, the pixel loss is load-bearing
-   > and the Phase 1 finding generalises to policy learning. If it learns
-   > anyway, the reconstruction term is not what makes this work and the
-   > README's account of the architecture needs revising.
-
+1. **Re-run `no_reconstruction` at 150k (C.1)** — the 30k attempt was
+   inconclusive because base Dreamer is also at the floor there. Only the
+   ablation arm needs GPU time; the §B base is the control. Command and
+   revised pre-registered hypothesis in §C.1. ≈ 8 A100-h.
 2. Horizon ablations (C) — §D found no open-loop degeneration through H=40,
    so H=20 ≈ H=15 is the prediction; H=5 should hurt credit assignment.
-3. Multi-seed Pong learning curves (B) — commands above.
-4. Remaining ablation groups (C).
-5. Ladder step 3: Breakout/MsPacman seeds, then CarRacing (Dreamer
-   continuous + SAC + PPO) with fewer seeds; CarRacing videos afterwards.
-   Note CarRacing is now unblocked on the action-space side — continuous
-   actions are rescaled to [-1,1] in the shared wrapper chain, so the buffer
-   stores the action the env actually applied (see README, protocol
-   deviation 6).
+   Same budget correction applies: run at ≥ 100k, not 30k.
+3. Remaining ablation groups (C), likewise at ≥ 100k. Note this raises the
+   full-matrix cost well above the ≈ 5 A100-h quoted below, which assumed
+   30k — budget ≈ 8 A100-h per preset at 150k × 3 seeds.
+4. Ladder step 3: Breakout/MsPacman, then CarRacing (Dreamer continuous +
+   SAC + PPO) with fewer seeds; CarRacing videos afterwards. Both are
+   unblocked as of 2026-08-15:
+   - the benchmark scripts take `ENV` from the environment, so a second game
+     needs no edit: `ENV=atari_breakout sbatch --export=ALL,ENV slurm/benchmark.sbatch`;
+   - each env writes to its own `experiments/benchmark/<env>/` tree, so a new
+     game cannot append into Pong's CSVs;
+   - continuous actions are rescaled to [-1,1] in the shared wrapper chain,
+     so the buffer stores the action the env actually applied (see README,
+     protocol deviation 6);
+   - Box2D is installed in the Athena venv and `CarRacing-v3` was verified
+     there on 2026-08-15 (`swig` + `gymnasium[box2d]`).
+   Breakout first: it reuses the exact discrete path the 400k benchmark just
+   validated, so it answers "is this tuned to Pong?" for ~5 A100-h. CarRacing
+   last — it is the only study that exercises the continuous actor loss
+   (gradient through the dynamics rather than REINFORCE), and its long
+   episodes make it the most expensive at ≈ 6–10 h per seed.
 
 Suggested venue: Cyfronet Athena (A100) — `slurm/setup_athena.sh`,
 `slurm/benchmark.sbatch`, `slurm/benchmark_array.sbatch`,
@@ -225,30 +312,38 @@ Suggested venue: Cyfronet Athena (A100) — `slurm/setup_athena.sh`,
 
 The ablation array indexes `configs/ablation/` presets in the order listed in
 `slurm/ablations.sbatch`, so single studies can be launched without the whole
-matrix (~2 h/run on a 1660 Ti, ~25 min on an A100; 2 seeds per preset, or set
-`SEEDS` to override — see below):
+matrix. `SEEDS` and `STEPS` are environment overrides:
 
 ```bash
-# Task 0 is the base run. Launch it WITH no_reconstruction, not separately:
-# the only base data on record is 60k steps / 3 seeds and predates the fixes
-# below, so it is not a control for a 30k reconstruction-free run.
-SEEDS='[0,1,2]' sbatch --export=ALL,SEEDS --array=0,10 slurm/ablations.sbatch
-sbatch --array=1-3  slurm/ablations.sbatch   # horizon_5 / _10 / _20   (~3 A100-h)
-sbatch --array=0-10 slurm/ablations.sbatch   # the full matrix         (~5 A100-h)
+# Re-run of the decisive preset at a budget where the control is learning.
+# No base task this time: the 400k benchmark base (section B) is the control.
+SEEDS='[0,1,2]' STEPS=150000 sbatch --time=12:00:00 \
+    --export=ALL,SEEDS,STEPS --array=10 slurm/ablations.sbatch
+
+# Horizons, same correction (~24 A100-h for the three presets):
+SEEDS='[0,1,2]' STEPS=150000 sbatch --time=12:00:00 \
+    --export=ALL,SEEDS,STEPS --array=1-3 slurm/ablations.sbatch
 
 # After the array finishes:
 python viz/ablation_summary.py && python viz/learning_curves.py
 ```
 
-Two seeds is the default because the full matrix is priced at two. For the
-decisive presets use three: the one-in-three floor failure documented in §E
-is otherwise indistinguishable from the collapse the `no_reconstruction`
-hypothesis predicts. Three seeds at 30k steps is ~2 h per array task on an
-A100, still inside the script's 6 h walltime.
+The 30k default that the array still ships with is a smoke-test budget, kept
+so `--array=0-10` stays cheap enough to prove the matrix executes. It is not
+a research budget: section C.1 is the worked example of a 30k ablation
+answering nothing.
 
-**Before launching anything on Athena, sync `$SCRATCH/dreamer-rssm` to a
-revision that contains the 2026-08-09 correctness fixes** — in particular
-`fix(dreamer): act on the reset observation, not the terminal frame` and
-`fix(seed): make a run reproducible from cfg.seed`. Runs started on older
-code carry the reset-observation bug and are not comparable with anything
-produced after it.
+Two operational rules learned the hard way on 2026-08-10 and -15:
+
+- **Sync `$SCRATCH/dreamer-rssm` before launching.** Runs started before the
+  2026-08-09 fixes — `fix(dreamer): act on the reset observation, not the
+  terminal frame` and `fix(seed): make a run reproducible from cfg.seed` —
+  carry the reset-observation bug and are not comparable with anything
+  produced after it.
+- **Archive the previous campaign's CSV directory before starting a new one
+  on the same env.** `BenchmarkLogger` appends, and a preset that reuses a
+  label (task 0 writes plain `dreamer_seed*.csv`) will append a fresh
+  low-step curve onto a finished high-step one, which `load_run()` then
+  rejects outright. The convention in this repo is a dated sibling:
+  `ALE_Pong-v5_bench400k_20260810/`, `ALE_Pong-v5_norecon_20260815/`.
+  Different *environments* need no such care — they get their own tree.
