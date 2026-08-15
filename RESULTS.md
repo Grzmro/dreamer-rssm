@@ -225,13 +225,30 @@ Suggested venue: Cyfronet Athena (A100) — `slurm/setup_athena.sh`,
 
 The ablation array indexes `configs/ablation/` presets in the order listed in
 `slurm/ablations.sbatch`, so single studies can be launched without the whole
-matrix (~2 h/run on a 1660 Ti, ~25 min on an A100; 2 seeds per preset):
+matrix (~2 h/run on a 1660 Ti, ~25 min on an A100; 2 seeds per preset, or set
+`SEEDS` to override — see below):
 
 ```bash
-sbatch --array=10   slurm/ablations.sbatch   # no_reconstruction only  (~1 A100-h)
+# Task 0 is the base run. Launch it WITH no_reconstruction, not separately:
+# the only base data on record is 60k steps / 3 seeds and predates the fixes
+# below, so it is not a control for a 30k reconstruction-free run.
+SEEDS='[0,1,2]' sbatch --export=ALL,SEEDS --array=0,10 slurm/ablations.sbatch
 sbatch --array=1-3  slurm/ablations.sbatch   # horizon_5 / _10 / _20   (~3 A100-h)
 sbatch --array=0-10 slurm/ablations.sbatch   # the full matrix         (~5 A100-h)
 
 # After the array finishes:
 python viz/ablation_summary.py && python viz/learning_curves.py
 ```
+
+Two seeds is the default because the full matrix is priced at two. For the
+decisive presets use three: the one-in-three floor failure documented in §E
+is otherwise indistinguishable from the collapse the `no_reconstruction`
+hypothesis predicts. Three seeds at 30k steps is ~2 h per array task on an
+A100, still inside the script's 6 h walltime.
+
+**Before launching anything on Athena, sync `$SCRATCH/dreamer-rssm` to a
+revision that contains the 2026-08-09 correctness fixes** — in particular
+`fix(dreamer): act on the reset observation, not the terminal frame` and
+`fix(seed): make a run reproducible from cfg.seed`. Runs started on older
+code carry the reset-observation bug and are not comparable with anything
+produced after it.
