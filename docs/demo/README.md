@@ -14,8 +14,23 @@ For the measured results, see [`RESULTS.md`](../../RESULTS.md) and the
 "Benchmark results" / "Phase 2 results" sections of the
 [README](../../README.md).
 
-Open [`index.html`](index.html) for the assembled page, or
-[`SHOWCASE.md`](SHOWCASE.md) for the same content as markdown.
+Open [`SHOWCASE.md`](SHOWCASE.md) for the whole set (GitHub renders it), or
+[`index.html`](index.html) for the styled page (clone first — GitHub shows
+HTML as source).
+
+Dreamer, PPO, DQN and a random policy on the same seeds, each panel showing
+that agent's own 64×64 input, its live score, and its final return once its
+episode ends:
+
+![Dreamer vs the baselines](assets/pong_v5_compare.gif)
+
+Left: what actually happened. Right: what the world model dreamed from the
+same latent state, decoded to pixels — prior-only, the path the policy is
+trained on. The red border marks where the dream takes over:
+
+![real vs imagined](assets/pong-v5_branch0020_H15.gif)
+
+![Dreamer vs model-free baselines](assets/ALE_Pong-v5_summary.png)
 
 ## What was run
 
