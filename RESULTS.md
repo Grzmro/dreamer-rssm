@@ -111,13 +111,18 @@ Checkpoint: `experiments/dreamer_pong/checkpoints/dreamer_final.pt`
    trained continuous checkpoint yet (no training allowed at present).
 4. **Gameplay GIFs (Dreamer vs baselines)** — `viz/gameplay_gif.py`,
    output `experiments/gameplay/<env>_{<agent>,compare}.{gif,mp4}` +
-   `gameplay.json`. **Tooling landed and smoke-tested end to end (real
-   ALE frames, a replayed DQN checkpoint and the random floor); no
-   artifact recorded yet** — it replays checkpoints, and no training is
-   allowed at present. Caveat for whoever runs it: the Phase 3 baseline
-   runs predate `baselines.checkpoint_dir`, so PPO/DQN panels need those
-   baselines re-run (or the `random` panel, which needs no checkpoint).
-5. **Showcase page** — `viz/make_showcase.py` collects the GIFs, videos,
+   `gameplay.json`. **Not yet recorded from the Phase 2 checkpoint** (that
+   run is not in the current sandbox). What exists is a full end-to-end
+   pipeline run at a smoke-scale budget — 3 000 env steps per agent, 1
+   seed, 100-step episodes, CPU — checked in under `docs/demo/`. **Those
+   artifacts carry no evidence about any agent**: no agent learned to
+   play at that budget, and the page and its README say so. Caveat for
+   whoever records the real ones: the Phase 3 baseline runs predate
+   `baselines.checkpoint_dir`, so PPO/DQN panels need those baselines
+   re-run (or the `random` panel, which needs no checkpoint).
+5. **Showcase page** — `scripts/make_demo.sh` runs the whole chain
+   (benchmark → GIFs → videos → diagnostics → page) at any budget, and
+   `viz/make_showcase.py` collects the GIFs, videos,
    curves, summary and ablations into `experiments/showcase/index.html`
    (+ `SHOWCASE.md`). It never trains and never fabricates: sections with
    no artifact on disk render as "not generated yet" with the command that

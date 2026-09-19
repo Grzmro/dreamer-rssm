@@ -174,6 +174,7 @@ def build(cfg: DictConfig) -> Path:
     assets.mkdir(parents=True, exist_ok=True)
     root = Path(v.get("benchmark_root") or "experiments/benchmark")
 
+    note = v.get("showcase_note")  # e.g. the budget these artifacts came from
     problems = []
     if bool(v.get("showcase_regenerate", True)):
         problems = regenerate_plots(root, int(v.get("dream_window", 10)))
@@ -183,6 +184,12 @@ def build(cfg: DictConfig) -> Path:
     body, md = [], [f"# {cfg.env.name} showcase", "",
                     f"Generated {date.today().isoformat()} by `viz/make_showcase.py` "
                     "— no training, only artifacts already on disk.", ""]
+    if note:
+        # A page that does not say what budget produced it invites the reader
+        # to take a smoke-scale run for a result.
+        body.append(f"<div class='missing'><p><strong>{html.escape(str(note))}"
+                    "</strong></p></div>")
+        md += [f"> **{note}**", ""]
 
     gameplay_json = Path(v.get("gameplay_out_dir") or "experiments/gameplay") / "gameplay.json"
     meta = json.loads(gameplay_json.read_text(encoding="utf-8")) if gameplay_json.exists() else None

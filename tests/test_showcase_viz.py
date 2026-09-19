@@ -182,6 +182,16 @@ def test_showcase_embeds_found_artifacts_with_captions(tmp_path):
     assert (index.parent / "assets" / "pong_v5_compare.gif").exists()
 
 
+def test_showcase_note_is_shown_on_the_page(tmp_path):
+    """A page with no budget on it invites a smoke run to read as a result."""
+    from viz.make_showcase import build
+
+    note = "Smoke-scale: 3000 env steps, 1 seed — not a result."
+    index = build(_showcase_cfg(tmp_path, showcase_note=note))
+    assert note in index.read_text(encoding="utf-8")
+    assert note in (index.parent / "SHOWCASE.md").read_text(encoding="utf-8")
+
+
 def test_baseline_checkpoint_roundtrip_replays_the_policy(tmp_path):
     """A saved baseline must come back as a callable policy, or the GIFs
     have nothing but Dreamer to show."""

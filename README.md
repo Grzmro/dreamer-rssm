@@ -294,7 +294,16 @@ python viz/summary_figure.py && python viz/ablation_summary.py
 
 # 4. collect all of it into experiments/showcase/{index.html,SHOWCASE.md}
 python viz/make_showcase.py
+
+# or all four steps at once, training included:
+scripts/make_demo.sh                                    # CPU-sized smoke budget
+STEPS=100000 SEEDS="[0,1,2]" DEVICE=cuda scripts/make_demo.sh   # a real one
 ```
+
+A rendered example of the output — from a deliberately tiny budget, so read
+[`docs/demo/README.md`](docs/demo/README.md) before the numbers — lives in
+[`docs/demo/`](docs/demo/). `viz.showcase_note` puts that budget on the page
+itself, so a demo run cannot be mistaken for a result.
 
 `viz/gameplay_gif.py` plays every agent on the same seeds and renders one
 GIF + MP4 per agent plus a `*_compare` strip of all of them. Each panel

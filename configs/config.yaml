@@ -55,6 +55,7 @@ viz:
   showcase_dir: experiments/showcase
   showcase_regenerate: true   # rebuild the benchmark plots from the CSVs first
   showcase_max_per_section: 6
+  showcase_note: null         # banner on the page, e.g. the budget behind it
 
 hydra:
   run:

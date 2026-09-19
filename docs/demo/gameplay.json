@@ -1,0 +1,52 @@
+{
+  "env": "ALE/Pong-v5",
+  "action_repeat": 4,
+  "seed": 0,
+  "episodes_per_agent": 3,
+  "agents": [
+    {
+      "label": "Dreamer",
+      "note": "RSSM latent policy, trained 3000 env steps",
+      "kept_return": 1.0,
+      "kept_length": 100,
+      "all_returns": [
+        -2.0,
+        1.0,
+        -2.0
+      ]
+    },
+    {
+      "label": "PPO",
+      "note": "PPO (4xgray stack), trained 2816 env steps",
+      "kept_return": -1.0,
+      "kept_length": 100,
+      "all_returns": [
+        -1.0,
+        -1.0,
+        -2.0
+      ]
+    },
+    {
+      "label": "DQN",
+      "note": "DQN (4xgray stack), trained 3000 env steps",
+      "kept_return": -2.0,
+      "kept_length": 100,
+      "all_returns": [
+        -2.0,
+        -2.0,
+        -2.0
+      ]
+    },
+    {
+      "label": "Random",
+      "note": "uniform random actions",
+      "kept_return": -2.0,
+      "kept_length": 100,
+      "all_returns": [
+        -2.0,
+        -2.0,
+        -2.0
+      ]
+    }
+  ]
+}

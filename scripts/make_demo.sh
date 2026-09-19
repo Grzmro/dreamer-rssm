@@ -57,7 +57,9 @@ for script in reconstruction open_loop_rollout; do
 done
 
 echo "=== 5/5 showcase page"
+NOTE="${NOTE:-Budget: $STEPS env steps per agent, seeds $SEEDS, ${TIME_LIMIT}-step episodes on $DEVICE. Read the budget before the numbers.}"
 python viz/make_showcase.py \
+    "viz.showcase_note=\"$NOTE\"" \
     viz.benchmark_root="$ROOT" viz.gameplay_out_dir="$ROOT/gameplay" \
     viz.video_out_dir="$ROOT/videos" viz.wm_out_dir="$ROOT/wm" \
     viz.run_dir="$ROOT/runs/dreamer_seed0" viz.out_dir="$ROOT/sanity" \
