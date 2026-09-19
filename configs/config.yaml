@@ -42,6 +42,19 @@ viz:
   video_context: 8            # shared real frames shown before the branch
   video_max_steps: 900        # cap on the recorded real episode
   video_fps: 8
+  # Phase 4 gameplay GIFs (viz/gameplay_gif.py):
+  gameplay_agents: []         # "kind[:label]=ckpt"; kind in {dreamer,ppo,dqn,random}
+  gameplay_out_dir: experiments/gameplay
+  gameplay_episodes: 1        # episodes played per agent; the best-returning one is kept
+  gameplay_max_steps: 600
+  gameplay_seed: 0
+  gameplay_fps: 12
+  gameplay_scale: 4
+  gameplay_eval_epsilon: 0.01  # eval-time exploration (DQN's greedy argmax can deadlock)
+  # Phase 4 showcase page (viz/make_showcase.py):
+  showcase_dir: experiments/showcase
+  showcase_regenerate: true   # rebuild the benchmark plots from the CSVs first
+  showcase_max_per_section: 6
 
 hydra:
   run:

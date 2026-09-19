@@ -17,7 +17,7 @@ envs/          # environment wrappers (64x64 resize, grayscale, action repeat, t
 data/          # sequential replay buffer (whole episodes, uint8, FIFO eviction)
 train/         # collection, world-model training, lambda-returns, imagination rollout, Dreamer loop
 models/        # world model (encoder/decoder/RSSM/heads) + actor, critic, AC losses, return normalizer
-viz/           # sanity checks, reconstruction, open-loop rollout, dream-vs-real returns
+viz/           # sanity checks, reconstruction, open-loop rollout, dream-vs-real returns, gameplay GIFs, benchmark plots, showcase page
 configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm, agent, train_dreamer)
 experiments/   # run outputs (gitignored)
 tests/         # pytest
@@ -269,6 +269,50 @@ steps for the model-free agents (DQN/PPO reach non-trivial Pong play
 around 1-2M frames = 250-500k post-repeat steps), 3 seeds x 100-150k steps
 for scratch Dreamer, identical protocol — roughly one GPU-day on a single
 A100-class card.
+
+## Showing it works (GIFs, plots, one shareable page)
+
+Everything below is *inference and plotting only* — it reads checkpoints and
+the benchmark CSVs, never trains, and never invents a number. With no runs
+on disk the showcase page still builds and names the command that fills each
+gap, so a half-finished demo says which half is missing.
+
+```bash
+# 1. the agents playing, side by side (Dreamer vs baselines vs random)
+python viz/gameplay_gif.py '+viz.gameplay_agents=[
+    "dreamer:Dreamer (100k)=experiments/dreamer_pong/checkpoints/dreamer_final.pt",
+    "ppo=experiments/baselines/ppo_seed0.pt",
+    "dqn=experiments/baselines/dqn_seed0.pt",
+    "random"]' viz.gameplay_episodes=3
+
+# 2. real vs imagined: what the world model dreams from the same state
+python viz/real_vs_imagined_video.py viz.video_ckpt=experiments/dreamer_pong/checkpoints/dreamer_final.pt
+
+# 3. curves + the one-slide comparison against the baselines
+python viz/learning_curves.py && python viz/benchmark_comparison.py
+python viz/summary_figure.py && python viz/ablation_summary.py
+
+# 4. collect all of it into experiments/showcase/{index.html,SHOWCASE.md}
+python viz/make_showcase.py
+```
+
+`viz/gameplay_gif.py` plays every agent on the same seeds and renders one
+GIF + MP4 per agent plus a `*_compare` strip of all of them. Each panel
+shows the agent's own 64x64 input (baselines: grayscale, 4-frame stack, per
+`baselines/common.py`), its live score and, once its episode ends, its final
+return — a shorter episode is dimmed and held rather than dropped.
+`gameplay.json` records every episode played, so a kept "best of 3" says so.
+
+Baseline policies are replayable because `baselines/{ppo,dqn_rainbow}.py`
+now save their final weights to `baselines.checkpoint_dir`
+(`experiments/baselines/<agent>_seed<k>.pt`; set it to `null` to skip).
+DQN is replayed with `viz.gameplay_eval_epsilon` (default 0.01) — a purely
+greedy argmax policy can deadlock on Atari.
+
+`viz/summary_figure.py` adds the comparison figure the curves alone do not
+give: sample efficiency, final return per agent with **one dot per seed**,
+and the wall-clock price of the same env-step budget, plus the same numbers
+as `<env>_summary.md` / `.csv`.
 
 ## Tests
 

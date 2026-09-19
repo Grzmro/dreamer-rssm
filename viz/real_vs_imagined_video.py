@@ -39,7 +39,10 @@ from train.imagine_rollout import imagine_rollout
 
 
 def load_dreamer(ckpt_path: str | Path, device):
-    """Rebuild (world model, actor) from a dreamer_loop checkpoint."""
+    """Rebuild (world model, actor, cfg, raw checkpoint) from a dreamer_loop
+    checkpoint; the raw dict carries the training metadata (env_step, update)
+    that callers label their videos with, so nobody has to read the file twice.
+    """
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
     cfg = OmegaConf.create(ckpt["cfg"])
     wm = WorldModel(
@@ -56,7 +59,7 @@ def load_dreamer(ckpt_path: str | Path, device):
     ).to(device)
     actor.load_state_dict(ckpt["actor_state"])
     actor.eval()
-    return wm, actor, cfg
+    return wm, actor, cfg, ckpt
 
 
 @torch.no_grad()
@@ -130,7 +133,7 @@ def write_video(panels: list[np.ndarray], out_base: Path, fps: int, pause: int =
 
 def make_videos(cfg: DictConfig) -> list[Path]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    wm, actor, ckpt_cfg = load_dreamer(cfg.viz.video_ckpt, device)
+    wm, actor, ckpt_cfg, _ = load_dreamer(cfg.viz.video_ckpt, device)
     if wm.decoder is None:
         raise RuntimeError("checkpoint was trained reconstruction-free — nothing to decode")
     env = make_env(cfg.env)

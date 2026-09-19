@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import gymnasium as gym
 import hydra
@@ -26,6 +27,7 @@ import torch.nn as nn
 from omegaconf import DictConfig
 
 from baselines.common import make_baseline_env
+from baselines.policies import save_baseline_checkpoint
 from train.common_logger import BenchmarkLogger
 from train.seeding import seed_everything
 from train.train_world_model import resolve_device
@@ -184,6 +186,14 @@ def train_dqn(cfg: DictConfig, seed: int | None = None) -> None:
 
     env.close()
     bench.close()
+    if b.get("checkpoint_dir"):
+        ckpt = save_baseline_checkpoint(
+            Path(b.checkpoint_dir) / f"dqn_seed{seed}.pt",
+            kind="dqn", model=q_net, cfg=cfg, seed=seed, env_step=total_steps,
+            obs_shape=env.observation_space.shape, action_dim=num_actions,
+            extra={"dueling": bool(d.dueling)},
+        )
+        print(f"[dqn] policy saved -> {ckpt}")
     print(f"[dqn] done: {total_steps} env steps, {n_episodes} episodes "
           f"in {(time.time() - start_time) / 60:.1f} min -> {bench.path}")
 

@@ -24,6 +24,7 @@ from omegaconf import DictConfig
 from torch.distributions import Categorical, Normal
 
 from baselines.common import make_baseline_env
+from baselines.policies import save_baseline_checkpoint
 from train.common_logger import BenchmarkLogger
 from train.seeding import seed_everything
 from train.train_world_model import resolve_device
@@ -254,6 +255,16 @@ def train_ppo(cfg: DictConfig, seed: int | None = None) -> None:
 
     envs.close()
     bench.close()
+    if b.get("checkpoint_dir"):
+        ckpt = save_baseline_checkpoint(
+            Path(b.checkpoint_dir) / f"ppo_seed{seed}.pt",
+            kind="ppo", model=agent, cfg=cfg, seed=seed, env_step=global_step,
+            obs_shape=envs.single_observation_space.shape,
+            action_dim=int(envs.single_action_space.n) if agent.discrete
+            else int(np.prod(envs.single_action_space.shape)),
+            discrete=agent.discrete,
+        )
+        print(f"[ppo] policy saved -> {ckpt}")
     print(f"[ppo] done: {global_step} env steps, {n_episodes} episodes "
           f"in {(time.time() - start_time) / 60:.1f} min -> {bench.path}")
 

@@ -41,6 +41,11 @@ the −21 random floor for the whole 100k-step budget; wall-clock order is
 reversed (2.7 / 9.2 min vs 249 min). 1 seed = methodologically weak;
 treat as direction, not effect size.
 
+`viz/summary_figure.py` turns the same CSVs into the one-figure
+comparison (sample efficiency, final return with one dot per seed,
+wall-clock) plus `<env>_summary.{md,csv}` — the seed count is printed on
+every bar, so a single-seed result cannot read as a measured effect.
+
 **To finish (exact commands)**:
 
 ```bash
@@ -104,6 +109,19 @@ Checkpoint: `experiments/dreamer_pong/checkpoints/dreamer_final.pt`
    model trained with H=15 — still visually coherent, consistent with the
    open-loop MSE curve). Second environment (CarRacing) deferred — no
    trained continuous checkpoint yet (no training allowed at present).
+4. **Gameplay GIFs (Dreamer vs baselines)** — `viz/gameplay_gif.py`,
+   output `experiments/gameplay/<env>_{<agent>,compare}.{gif,mp4}` +
+   `gameplay.json`. **Tooling landed and smoke-tested end to end (real
+   ALE frames, a replayed DQN checkpoint and the random floor); no
+   artifact recorded yet** — it replays checkpoints, and no training is
+   allowed at present. Caveat for whoever runs it: the Phase 3 baseline
+   runs predate `baselines.checkpoint_dir`, so PPO/DQN panels need those
+   baselines re-run (or the `random` panel, which needs no checkpoint).
+5. **Showcase page** — `viz/make_showcase.py` collects the GIFs, videos,
+   curves, summary and ablations into `experiments/showcase/index.html`
+   (+ `SHOWCASE.md`). It never trains and never fabricates: sections with
+   no artifact on disk render as "not generated yet" with the command that
+   produces them.
 
 ## E. Method-validation notebook (inference-only evidence)
 

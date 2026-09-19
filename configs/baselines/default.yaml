@@ -7,6 +7,9 @@ grayscale: true       # (Dreamer keeps RGB single frames + recurrent state)
 total_env_steps: 100000
 device: auto
 benchmark_dir: experiments/benchmark
+# Final policy weights, so a trained baseline can be replayed for the demo
+# GIFs (viz/gameplay_gif.py). Set to null to skip saving.
+checkpoint_dir: experiments/baselines
 
 ppo:
   num_envs: 8
