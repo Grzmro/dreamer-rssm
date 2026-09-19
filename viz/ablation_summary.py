@@ -58,7 +58,7 @@ def final_return(runs, last_k: int = 10) -> tuple[float, float]:
 
 
 def steps_to_threshold(
-    runs, threshold: float, window: int = 10
+    runs, threshold: float, window: int = 10, x_key: str = "env_step"
 ) -> tuple[float | None, int, int]:
     """(mean env steps to reach ``threshold``, seeds that reached it, seeds total).
 
@@ -66,13 +66,14 @@ def steps_to_threshold(
     so the mean is inherently conditional on reaching it. The two counts are
     returned alongside it so callers report that coverage instead of
     presenting a one-of-three-seeds number as if it described the variant.
+    ``x_key="wall_time_s"`` measures the same crossing in seconds instead.
     """
     hits = []
     for run in runs:
         y = rolling(run["episode_return"], window)
         if len(y) == 0:  # a run with no logged episodes
             continue
-        x = run["env_step"][len(run["env_step"]) - len(y):]
+        x = run[x_key][len(run[x_key]) - len(y):]
         idx = int(np.argmax(y >= threshold))
         if y[idx] >= threshold:
             hits.append(float(x[idx]))
