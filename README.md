@@ -1,26 +1,76 @@
 # dreamer-rssm
 
-A from-scratch **DreamerV2/V3**-style world-model RL implementation (simplified, with ablations), built in phases.
+A from-scratch **DreamerV2/V3**-style world-model RL agent in PyTorch. It
+learns a model of the game from pixels, trains its policy entirely on
+rollouts *imagined* by that model, and is benchmarked against PPO and DQN
+under one shared, documented measurement protocol.
 
-**Status: Phase 2 — policy learning in imagination.** On top of the Phase 0
-data pipeline and the Phase 1 world model (CNN encoder/decoder, RSSM with
-categorical/gaussian latents, reward/continue heads), the repo now contains
-the full Dreamer loop: an actor and critic trained purely on imagination
-rollouts through the frozen world-model prior, lambda-returns with an EMA
-target critic, and interleaved collection <-> world-model <-> actor-critic
-training driven by a train ratio (see [Roadmap](#roadmap)).
+## Headline result
+
+ALE Pong, **400k environment steps** (1.6M frames after action repeat 4),
+**3 seeds**, one A100 per seed, every agent on the identical wrapper chain
+([RESULTS.md §B](RESULTS.md#b-learning-curves-multi-seed)):
+
+| agent | final return (mean ± std over 3 seeds) | wall-clock per seed |
+|---|---|---|
+| **Dreamer** (this repo, from scratch) | **+9.6 ± 1.0** | 9.4 h |
+| DQN (double + dueling) | −7.9 ± 2.2 | 17 min |
+| PPO | −19.9 ± 0.8 | 7 min |
+
+How to read it:
+
+- **Dreamer wins on samples and loses on compute** — ~33× DQN's and ~83×
+  PPO's wall-clock. Both axes are reported on purpose; neither alone is the
+  finding.
+- **Episodes are capped at 1000 agent steps**, so +9.6 is the score margin
+  when the clock ran out, not a game played to 21. The cap is the same for
+  every agent, but these numbers are not comparable with published
+  full-game Pong scores (~+20).
+- **PPO never leaves the random floor (≈ −21) at this budget**, so the
+  table does not say how much more data PPO actually needs — that is an
+  open question below.
+- **Evidence that the policy learns from imagination:** at a fixed budget
+  of 60k real steps, more imagination updates per real step monotonically
+  improve the return — train ratio 0.1 → −20.5, 0.3 → −11.9, 1.0 → −6.1
+  ([RESULTS.md §E](RESULTS.md#e-method-validation-notebook-inference-only-evidence)).
+
+## Status
+
+| phase | content | status |
+|---|---|---|
+| 0 | data pipeline: env wrappers, sequence replay buffer | done |
+| 1 | world model: CNN encoder/decoder, RSSM, reward/continue heads | done |
+| 2 | actor-critic trained in imagination, full Dreamer loop | done |
+| 3 | PPO / DQN / SAC baselines, shared benchmark protocol | done |
+| 4 | 400k × 3-seed benchmark, parametric sweep, visual artifacts | done; architecture ablations open |
+| 5 | second game, baselines at their own budget, ablations at 150k | **prepared, not yet run** — [RESULTS.md §F](RESULTS.md#f-phase-5-generality-baselines-at-their-own-budget-mechanism) |
+
+Open questions, stated plainly:
+
+1. **One game.** Every trained result is on Pong. Breakout reuses the exact
+   discrete code path and is the next run.
+2. **Why it works.** The train-ratio dose-response shows *that* imagination
+   drives learning, not *which* components matter. The only architecture
+   ablation run so far (no reconstruction loss, 30k steps) was
+   inconclusive: the control had not started learning either
+   ([RESULTS.md §C.1](RESULTS.md#c1-no_reconstruction-at-30k--inconclusive-and-why-that-matters)).
+3. **How much data the baselines need.** A 3-hour run per baseline gives
+   PPO ~10M and DQN ~4M steps, and `viz/sample_efficiency.py` turns that into
+   "N× more samples than Dreamer to reach the same return".
 
 ## Repo structure
 
 ```
 envs/          # environment wrappers (64x64 resize, grayscale, action repeat, time limit, normalization, [-1,1] action rescaling)
 data/          # sequential replay buffer (whole episodes, uint8, FIFO eviction)
-train/         # collection, world-model training, lambda-returns, imagination rollout, Dreamer loop
+train/         # collection, world-model training, lambda-returns, imagination rollout, Dreamer loop, benchmark driver
 models/        # world model (encoder/decoder/RSSM/heads) + actor, critic, AC losses, return normalizer
-viz/           # sanity checks, reconstruction, open-loop rollout, dream-vs-real returns
-configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm, agent, train_dreamer)
+baselines/     # PPO, DQN (double+dueling), SAC — single-file CleanRL adaptations on the same wrapper chain
+viz/           # sanity checks, reconstruction, open-loop rollout, dream-vs-real, benchmark/ablation/sample-efficiency tables
+configs/       # Hydra configs (groups: env, buffer, collect, model, train_wm, agent, train_dreamer, baselines, benchmark, ablation)
+slurm/         # Cyfronet Athena (A100) job scripts: benchmark, seed arrays, ablation matrix
 experiments/   # run outputs (gitignored)
-tests/         # pytest
+tests/         # pytest (run in CI on every push)
 ```
 
 ## Installation
@@ -278,7 +328,10 @@ python baselines/sac.py env=carracing baselines.total_env_steps=100000
 python viz/benchmark_comparison.py            # plots from experiments/benchmark
 ```
 
-### Benchmark results (Pong, shortened — single seed)
+### First benchmark (Pong, 100k, single seed — superseded)
+
+Kept as the record of the first run. The 400k × 3-seed benchmark at the top
+of this README replaced it; the numbers below are not the headline.
 
 Shared budget 100k env steps (post action-repeat), CleanRL default
 hyperparameters, 1 seed (methodologically weak — a real experiment needs
@@ -302,17 +355,19 @@ already at recon 2.5e-4/px, policy still at the floor, entropy notably
 lower than in the warm-started run — worth watching for premature entropy
 collapse when training from scratch on sparse rewards).
 
-Suggested full experiment (outside this sandbox): 3+ seeds x 400k env
-steps for the model-free agents (DQN/PPO reach non-trivial Pong play
-around 1-2M frames = 250-500k post-repeat steps), 3 seeds x 100-150k steps
-for scratch Dreamer, identical protocol — roughly one GPU-day on a single
-A100-class card.
+That shortfall set the budget of the full experiment: DQN and PPO reach
+non-trivial Pong play only around 1–2M frames (250–500k post-repeat steps),
+so 100k measured nothing about them. The full run used 400k steps × 3 seeds
+for every agent (results at the top; `RESULTS.md` §B).
 
 ## Tests
 
 ```bash
 pytest tests/
 ```
+
+The suite runs on CPU in under a minute and GitHub Actions runs it on every
+push and pull request (`.github/workflows/tests.yml`).
 
 Coverage: wrappers (observation shape/range/dtype, `raw_obs` in info, exact normalization,
 action repeat with reward summing and early stop, time limit) and the replay buffer
@@ -374,13 +429,9 @@ wandb means adding a `WandbLogger` in one place and setting `logger.backend=wand
 
 ## Roadmap
 
-- **Phase 0**: data pipeline — DONE.
-- **Phase 1**: world model (encoder/decoder, RSSM, heads, isolated training,
-  reconstruction + open-loop validation) — DONE; validation numbers in
-  [Phase 1 results](#phase-1-results).
-- **Phase 2 (next step)**: actor/critic trained in imagination on the prior
-  (no encoder), using `RSSM.imagine()` with a policy callable; then ablations
-  (categorical vs gaussian latents, KL balancing, free nats).
+Phase status is the [Status](#status) table at the top; the experiment
+ledger — what ran, what is queued, with the exact launch command and a
+hypothesis registered before each run — is [RESULTS.md](RESULTS.md).
 
 ## Phase 1 results
 

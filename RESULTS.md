@@ -9,6 +9,11 @@ run, what every deferred experiment costs, and the exact commands to finish
 the plan (locally or on Cyfronet Athena via `slurm/`). Nothing below is
 silently skipped: every gap is listed in [Deferred work](#deferred-work).
 
+Update 2026-09-19: a fourth campaign — Breakout, the baselines at a budget
+where they learn, and the "why it works" ablations at 150k — is prepared
+with registered hypotheses in [§F](#f-phase-5-generality-baselines-at-their-own-budget-mechanism)
+but has not run.
+
 Revised 2026-08-09 after an audit of the recorded runs, with no new training:
 the dream-vs-real correlation is now reported detrended as well as raw (§E,
 and README "Phase 2 results" §2), the seed-dependent failure mode is stated
@@ -270,7 +275,125 @@ Still prepared but not yet run:
 |---|---|---|
 | architecture/loss ablations | `configs/ablation/*` (10 presets still open; `no_reconstruction` ran but was inconclusive at 30k — §C.1) | `slurm/ablations.sbatch` |
 
+## F. Phase 5: generality, baselines at their own budget, mechanism
+
+Prepared 2026-09-19, **not yet run**. Three campaigns, one per open question
+in the README. The hypotheses below are registered before any of them runs.
+Launch from an Athena login node after syncing the repo; each campaign writes
+to its own CSV root (`BENCH_DIR`) so nothing appends into an earlier curve.
+
+```bash
+cd $SCRATCH/dreamer-rssm && git pull           # the branch carrying this section
+source $SCRATCH/venvs/dreamer-rssm/bin/activate && pytest -q   # CPU, < 1 min
+
+# F.1 Breakout, sample-matched 400k, dreamer + dqn + ppo, 3 seeds in parallel
+ENV=atari_breakout BENCH_DIR=$SCRATCH/dreamer-rssm/experiments/benchmark_breakout400k \
+    sbatch --export=ALL,ENV,BENCH_DIR slurm/benchmark_array.sbatch
+
+# F.2 Pong baselines, 3 h each on the clock (configs/benchmark/time_3h.yaml)
+BENCHMARK=time_3h BENCH_DIR=$SCRATCH/dreamer-rssm/experiments/benchmark_pong_time3h \
+    sbatch --export=ALL,BENCHMARK,BENCH_DIR --time=8:00:00 slurm/benchmark_array.sbatch
+
+# F.3 Ablations at 150k x 3 seeds: base (0), horizon_5 (1), horizon_20 (3),
+#     no_reconstruction (10), gaussian_latent (11)
+SEEDS='[0,1,2]' STEPS=150000 BENCH_DIR=$SCRATCH/dreamer-rssm/experiments/benchmark_ablations150k \
+    sbatch --export=ALL,SEEDS,STEPS,BENCH_DIR --time=16:00:00 --array=0,1,3,10,11 \
+    slurm/ablations.sbatch
+```
+
+| campaign | question | A100-h | wall-clock |
+|---|---|---|---|
+| F.1 Breakout 400k | is the Pong result specific to Pong? | ≈ 30 | ≈ 10 h (3 GPUs) |
+| F.2 baselines 3 h | how much data do PPO/DQN need to match Dreamer? | ≈ 19 | ≈ 6.5 h (3 GPUs) |
+| F.3 ablations 150k | which components make it work? | ≈ 45 | ≈ 9–12 h (5 GPUs) |
+
+### F.1 Breakout — hypothesis
+
+Registered: **Dreamer's mean final return at 400k exceeds both DQN's and
+PPO's, as on Pong.** Falsified if DQN's mean is ≥ Dreamer's; the Pong
+result would then be at least partly a property of Pong. Breakout reuses the
+discrete path the Pong benchmark validated, so a failure here points at the
+environment, not at untested code. The protocol has no FireReset, no
+EpisodicLife and a 1000-step cap for everybody, so the scores will not match
+published Breakout numbers; only the comparison between agents is the result.
+
+Analysis: `python viz/benchmark_comparison.py viz.benchmark_root=experiments/benchmark_breakout400k`
+and `viz/learning_curves.py` with the same root.
+
+### F.2 Baselines at their own budget — hypothesis
+
+§B leaves PPO at −19.9, where "Dreamer beats PPO" only restates that PPO
+needs more data. This campaign measures *how much more*. Three hours per agent
+instead of the 2 h in Deferred work item 2: 2 h buys PPO ~7M steps, 3 h buys
+~10M — CleanRL's own `ppo_atari` budget — so a PPO failure can no longer be
+blamed on too little data. Dreamer is not re-run: its §B CSVs carry
+`wall_time_s` and are the reference.
+
+Registered, before running:
+
+1. **PPO reaches Dreamer's 400k return on ≥ 2 of 3 seeds, needing ≥ 10×
+   Dreamer's env steps.** If PPO has not reached it by ~10M steps, the claim
+   "PPO just needs more data" is wrong *for this protocol* (1000-step cap,
+   no reward clipping, 64×64 input) and the README must say so instead.
+2. **DQN reaches it on ≥ 2 of 3 seeds within ~4M steps** — held with less
+   confidence: its replay buffer is 100k, not CleanRL's 1M (protocol
+   deviation 5), which is known to slow DQN on long runs.
+3. **At equal wall-clock (3 h) both baselines are ahead of Dreamer**, whose
+   3-hour mark is only ~127k env steps (§B puts it between −3.8 and +4.4).
+
+Analysis — put Dreamer's §B CSVs next to the new ones, then:
+
+```bash
+cp <400k campaign>/ALE_Pong-v5/dreamer_seed*.csv experiments/benchmark_pong_time3h/ALE_Pong-v5/
+python viz/sample_efficiency.py viz.benchmark_root=experiments/benchmark_pong_time3h
+python viz/benchmark_comparison.py viz.benchmark_root=experiments/benchmark_pong_time3h
+```
+
+`viz/sample_efficiency.py` reports, per agent, the env steps and hours to
+first reach Dreamer's final return (rolling mean of 10 episodes, averaged
+over the seeds that reach it, with the coverage next to it) and the ratio to
+Dreamer's own crossing. Agents that never reach it get "n/a", not a
+lower-bound number dressed as a result.
+
+The §B CSVs are not on the development machine as of 2026-09-19; they have
+to come back from Athena (or wherever the 2026-08-10 campaign was archived)
+before this analysis — and before `$SCRATCH` retention removes them.
+
+### F.3 Ablations at 150k — hypotheses
+
+Five tasks, 3 seeds each, 150k steps: the base run plus the four presets
+that address "why does it work" — reconstruction loss (`no_reconstruction`),
+imagination length (`horizon_5`, `horizon_20`) and latent type
+(`gaussian_latent`). Model-size and KL-trick presets stay deferred.
+
+The base runs **in the same array** instead of reusing the §B curve as §C.1
+proposed: one extra task (~9 A100-h) buys a control from the same revision,
+the same week and the same code path, and removes the dependency on the §B
+CSVs above. The §B curve truncated at 150k (+4.4 ± 5.1) remains a
+cross-check that the new control behaves like the old one.
+
+**Detectability first.** With 3 seeds and a between-seed std of ~5 points
+at 150k, only differences of roughly 8 points or more can be called. A smaller
+gap is reported as *no detectable effect at this budget*, not as *no effect*.
+
+Registered, against the same-array base:
+
+| preset | expectation | falsified if |
+|---|---|---|
+| `no_reconstruction` | pixel loss is load-bearing: final < −15 (as §C.1) | final > −5 |
+| `horizon_5` | credit assignment suffers: final < base − 8 | within 8 of base, i.e. the critic's bootstrap carries the credit |
+| `horizon_20` | no detectable change: within 8 of base (open-loop stays coherent past 40 steps, §D) | differs from base by > 8 in either direction |
+| `gaussian_latent` | categorical is better on Atari (DreamerV2): final < base − 8 | within 8 of base or better |
+
+Analysis: `python viz/ablation_summary.py viz.benchmark_root=experiments/benchmark_ablations150k`.
+
 ## Deferred work
+
+§F schedules items 1, 2 (at 3 h instead of 2 h — see F.2), 3 (H=5 and H=20),
+the latent-type part of 4 and the Breakout part of 5, with launch commands.
+The list below is kept for the reasoning behind each item and for what §F
+does not cover: H=10, model-size and KL-trick ablations, MsPacman and
+CarRacing.
 
 In priority order, everything runnable as-is. Multi-seed Pong curves (B) are
 done as of 2026-08-10 and have dropped off this list. Position 1 is still the
