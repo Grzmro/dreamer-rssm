@@ -33,7 +33,9 @@ def test_non_positive_budget_means_no_budget(zero):
 def test_time_limit_fires_before_the_step_limit():
     b = TrainingBudget(max_env_steps=10**9, time_budget_s=0.05)
     assert not b.out_of_time()
-    time.sleep(0.06)
+    # Margin well above a clock tick: time.monotonic() is ~15.6 ms coarse on
+    # Windows, so a 10 ms margin made this flaky.
+    time.sleep(0.15)
     assert b.out_of_time()
     assert b.stopped_on == "time"
     # A while-loop agent must see the same verdict through exhausted().
@@ -48,7 +50,7 @@ def test_summary_flags_an_unspent_budget():
     assert "not spent" in b.summary(1)
 
     b2 = TrainingBudget(max_env_steps=10**9, time_budget_s=0.01)
-    time.sleep(0.02)
+    time.sleep(0.1)
     b2.out_of_time()
     assert "stopped on TIME" in b2.summary(123)
 
@@ -80,3 +82,20 @@ def test_sample_matched_protocol_is_unchanged_by_default():
     assert cfg.benchmark.agent_env_steps is None
     for agent in ("dreamer", "ppo", "dqn", "sac"):
         assert _agent_steps(cfg.benchmark, agent) == 12345
+
+
+def test_time_3h_preset_runs_only_the_baselines_on_the_clock():
+    """The long-budget baseline campaign (RESULTS.md §F), as the sbatch composes it."""
+    with initialize(version_base=None, config_path="../configs"):
+        cfg = compose(
+            config_name="config",
+            overrides=["benchmark=time_3h", "benchmark.total_env_steps=400000",
+                       "benchmark.seeds=[1]"],
+        )
+    b = cfg.benchmark
+    # Dreamer's recorded 400k run is reused (truncated on wall_time_s), not re-run.
+    assert list(b.agents) == ["ppo", "dqn"]
+    assert b.time_budget_s == 10800
+    assert _agent_steps(b, "ppo") == 11_000_000
+    assert _agent_steps(b, "dqn") == 4_500_000
+    assert list(b.seeds) == [1]

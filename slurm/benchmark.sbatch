@@ -11,6 +11,9 @@
 # carracing). Each env writes to its own experiments/benchmark/<env>/ tree, so
 # a second game cannot append into the first one's CSVs.
 #
+# BENCHMARK (preset in configs/benchmark/, default "default") and BENCH_DIR
+# (CSV root, default experiments/benchmark) work as in benchmark_array.sbatch.
+#
 # Check status from a phone SSH session:
 #   squeue --me
 #   tail -f dreamer-benchmark-<jobid>.log
@@ -36,16 +39,19 @@ cd "${SCRATCH}/dreamer-rssm"
 ENV="${ENV:-atari_pong}"
 STEPS="${STEPS:-400000}"
 SEEDS="${SEEDS:-[0]}"
-echo "[sbatch] env=${ENV} steps=${STEPS} seeds=${SEEDS}"
+BENCHMARK="${BENCHMARK:-default}"
+BENCH_DIR="${BENCH_DIR:-${SCRATCH}/dreamer-rssm/experiments/benchmark}"
+echo "[sbatch] env=${ENV} benchmark=${BENCHMARK} steps=${STEPS} seeds=${SEEDS} bench_dir=${BENCH_DIR}"
 
 RUN_DIR="${SCRATCH}/dreamer-rssm/experiments/athena_${SLURM_JOB_ID}"
 python train/run_benchmark.py \
     "env=${ENV}" \
+    "benchmark=${BENCHMARK}" \
     "benchmark.total_env_steps=${STEPS}" \
     "benchmark.seeds=${SEEDS}" \
-    baselines.benchmark_dir="${SCRATCH}/dreamer-rssm/experiments/benchmark" \
+    baselines.benchmark_dir="${BENCH_DIR}" \
     hydra.run.dir="${RUN_DIR}"
 
-echo "Done. Results: ${SCRATCH}/dreamer-rssm/experiments/benchmark"
+echo "Done. Results: ${BENCH_DIR}"
 echo "Copy them somewhere durable before \$SCRATCH gets cleaned, e.g.:"
-echo "  cp -r ${SCRATCH}/dreamer-rssm/experiments/benchmark \$PLG_GROUPS_STORAGE/<your-group>/"
+echo "  cp -r ${BENCH_DIR} \$PLG_GROUPS_STORAGE/<your-group>/"

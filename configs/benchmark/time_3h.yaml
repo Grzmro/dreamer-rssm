@@ -1,0 +1,22 @@
+# Baselines at a budget where they can actually learn Pong (RESULTS.md §F).
+#
+# At the sample-matched 400k budget PPO never leaves the random floor, so
+# "Dreamer beats PPO" there says little more than "PPO needs more data". This
+# preset gives PPO and DQN three hours each on one A100, which answers two
+# questions from the same runs:
+#   * how many env steps each baseline needs to reach Dreamer's 400k return
+#     (read off the env_step axis: viz/sample_efficiency.py), and
+#   * who is ahead at equal wall-clock (read off the wall_time_s axis, with
+#     Dreamer's 400k CSVs truncated at 3 h — no Dreamer re-run needed).
+#
+# Step targets sit just above what the measured A100 throughput reaches in
+# 3 h (ppo ~980/s -> ~10.6M, dqn ~397/s -> ~4.3M), so the clock is the
+# binding limit and the lr / epsilon schedules still run over a horizon the
+# agent nearly completes. 10M is also CleanRL's own ppo_atari default budget.
+agents: [ppo, dqn]
+total_env_steps: 400000           # fallback only; both agents are mapped below
+seeds: [0]
+time_budget_s: 10800              # 3 h
+agent_env_steps:
+  ppo: 11000000
+  dqn: 4500000

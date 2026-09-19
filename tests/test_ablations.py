@@ -119,3 +119,26 @@ def test_ablation_presets_compose():
             assert c.model.free_nats == 0.0
         if preset.startswith("horizon_"):
             assert c.train_dreamer.horizon == int(preset.split("_")[1])
+
+
+def test_slurm_ablation_array_names_only_real_presets():
+    """A typo in slurm/ablations.sbatch PRESETS would only fail on the cluster,
+    hours into a queue wait; the array index is also what RESULTS.md cites."""
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    script = (repo / "slurm" / "ablations.sbatch").read_text(encoding="utf-8")
+    block = script.split("PRESETS=(", 1)[1].split("\n)", 1)[0]  # comments contain ")"
+    names = [
+        line.split("#")[0].strip().strip('"') for line in block.splitlines()
+        if line.split("#")[0].strip()
+    ]
+    assert names[0] == ""  # index 0 is the base run, the control for every preset
+    available = {p.stem for p in (repo / "configs" / "ablation").glob("*.yaml")}
+    assert set(names[1:]) <= available, set(names[1:]) - available
+    # Indices RESULTS.md §C/§F launch by number:
+    assert names[10] == "no_reconstruction" and names[11] == "gaussian_latent"
+    assert names[1] == "horizon_5" and names[3] == "horizon_20"
+    array = re.search(r"#SBATCH --array=0-(\d+)", script)
+    assert array and int(array.group(1)) == len(names) - 1

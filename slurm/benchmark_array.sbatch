@@ -10,7 +10,14 @@
 #        ENV=atari_breakout sbatch --export=ALL,ENV slurm/benchmark_array.sbatch
 #
 # ENV is a config group name from configs/env/ (atari_pong, atari_breakout,
-# carracing). Each env writes to its own experiments/benchmark/<env>/ tree.
+# carracing). Each env writes to its own <BENCH_DIR>/<env>/ tree.
+#
+# BENCHMARK picks a preset from configs/benchmark/ (default: sample-matched,
+# all agents), e.g. BENCHMARK=time_3h for the longer, time-capped baselines.
+# BENCH_DIR picks where the CSVs go (default experiments/benchmark); give each
+# campaign its own directory, since BenchmarkLogger appends:
+#   ENV=atari_breakout BENCH_DIR=$SCRATCH/dreamer-rssm/experiments/benchmark_breakout400k \
+#       sbatch --export=ALL,ENV,BENCH_DIR slurm/benchmark_array.sbatch
 
 #SBATCH --job-name=dreamer-benchmark
 #SBATCH --account=plglscclass26-gpu-a100
@@ -35,16 +42,19 @@ cd "${SCRATCH}/dreamer-rssm"
 
 ENV="${ENV:-atari_pong}"
 STEPS="${STEPS:-400000}"
-echo "[sbatch] env=${ENV} steps=${STEPS} seed=${SLURM_ARRAY_TASK_ID}"
+BENCHMARK="${BENCHMARK:-default}"
+BENCH_DIR="${BENCH_DIR:-${SCRATCH}/dreamer-rssm/experiments/benchmark}"
+echo "[sbatch] env=${ENV} benchmark=${BENCHMARK} steps=${STEPS} seed=${SLURM_ARRAY_TASK_ID} bench_dir=${BENCH_DIR}"
 
 RUN_DIR="${SCRATCH}/dreamer-rssm/experiments/athena_${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
 python train/run_benchmark.py \
     "env=${ENV}" \
+    "benchmark=${BENCHMARK}" \
     "benchmark.total_env_steps=${STEPS}" \
     "benchmark.seeds=[${SLURM_ARRAY_TASK_ID}]" \
-    baselines.benchmark_dir="${SCRATCH}/dreamer-rssm/experiments/benchmark" \
+    baselines.benchmark_dir="${BENCH_DIR}" \
     hydra.run.dir="${RUN_DIR}"
 
 # Only render plots once, after the last array task to finish sees every CSV.
 echo "Seed ${SLURM_ARRAY_TASK_ID} done. Run this manually once all 3 array tasks finish:"
-echo "  python viz/benchmark_comparison.py"
+echo "  python viz/benchmark_comparison.py viz.benchmark_root=${BENCH_DIR}"
