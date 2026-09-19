@@ -26,6 +26,20 @@ from train.common_logger import load_benchmark
 from viz.benchmark_comparison import agent_color, rolling
 
 
+def effective_window(runs: list[dict[str, np.ndarray]], window: int) -> int:
+    """The largest rolling window that still leaves the shortest run a curve.
+
+    ``rolling`` returns ``n - w + 1`` points, so a run with fewer than
+    ``window + 1`` episodes collapses to a single point and is dropped for
+    having nothing to interpolate. On a short run (a smoke-scale budget, or
+    an agent whose episodes are long) that silently emptied the whole plot.
+    Shrinking the window keeps the run visible; callers label the axis with
+    the value this returns, so the plot says which smoothing it used.
+    """
+    shortest = min((len(r["episode_return"]) for r in runs), default=0)
+    return max(1, min(int(window), shortest - 1))
+
+
 def aggregate_seeds(
     runs: list[dict[str, np.ndarray]], window: int = 10, grid_points: int = 200
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -33,8 +47,10 @@ def aggregate_seeds(
 
     Each seed's rolling-mean curve is linearly interpolated onto a shared
     env-step grid spanning the range covered by ALL seeds (so the band never
-    extrapolates beyond a shorter run).
+    extrapolates beyond a shorter run). The window shrinks (never grows) to
+    fit the shortest run — see ``effective_window``.
     """
+    window = effective_window(runs, window)
     curves = []
     for run in runs:
         y = rolling(run["episode_return"], window)
@@ -60,14 +76,16 @@ def make_learning_curves(root: Path, window: int = 10) -> list[Path]:
 
     for env_name, agents in bench.items():
         fig, ax = plt.subplots(figsize=(9, 5))
+        shown = window
         for agent, runs in sorted(agents.items()):
             color = agent_color(agent)
+            shown = min(shown, effective_window(runs, window))
             grid, mean, std = aggregate_seeds(runs, window)
             ax.plot(grid, mean, color=color, lw=2,
                     label=f"{agent} (n={len(runs)} seed{'s' if len(runs) != 1 else ''})")
             ax.fill_between(grid, mean - std, mean + std, color=color, alpha=0.2)
         ax.set_xlabel("Environment steps (post action-repeat)")
-        ax.set_ylabel(f"episode return (rolling mean {window}, mean ± std)")
+        ax.set_ylabel(f"episode return (rolling mean {shown}, mean ± std)")
         ax.set_title(f"{env_name}: learning curves")
         ax.legend()
         ax.grid(alpha=0.3)

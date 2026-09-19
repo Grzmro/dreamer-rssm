@@ -34,7 +34,7 @@ from omegaconf import DictConfig
 from train.common_logger import load_benchmark
 from viz.ablation_summary import final_return
 from viz.benchmark_comparison import agent_color, rolling
-from viz.learning_curves import aggregate_seeds
+from viz.learning_curves import aggregate_seeds, effective_window
 
 
 def summarize_agents(agents: dict, window: int = 10, last_k: int = 10) -> list[dict]:
@@ -86,16 +86,28 @@ def make_summary(root: Path, window: int = 10, last_k: int = 10) -> list[Path]:
         fig, axes = plt.subplots(1, 3, figsize=(16, 4.6))
 
         ax = axes[0]
+        shown = min((effective_window(runs, window) for runs in agents.values()),
+                    default=window)
         for agent, runs in sorted(agents.items()):
+            color = agent_color(agent)
+            label = f"{agent} (n={len(runs)})"
+            if len(runs) == 1:
+                # No band to draw, and the shared across-seed grid spans only
+                # the range every agent covers — which drops a run that
+                # finished earlier. One seed gets its own curve over its own
+                # x range instead of disappearing from the figure.
+                y = rolling(runs[0]["episode_return"], effective_window(runs, window))
+                x = runs[0]["env_step"][len(runs[0]["env_step"]) - len(y):]
+                ax.plot(x, y, color=color, lw=2, label=label)
+                continue
             try:
                 grid, mean, std = aggregate_seeds(runs, window)
             except ValueError:  # a run with a single episode has no curve
                 continue
-            color = agent_color(agent)
-            ax.plot(grid, mean, color=color, lw=2, label=f"{agent} (n={len(runs)})")
+            ax.plot(grid, mean, color=color, lw=2, label=label)
             ax.fill_between(grid, mean - std, mean + std, color=color, alpha=0.2)
         ax.set_xlabel("Environment steps (post action-repeat)")
-        ax.set_ylabel(f"episode return (rolling {window})")
+        ax.set_ylabel(f"episode return (rolling {shown})")
         ax.set_title("Sample efficiency")
         ax.legend(fontsize=8)
         ax.grid(alpha=0.3)

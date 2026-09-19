@@ -86,6 +86,18 @@ def test_compose_strip_mixes_grayscale_and_rgb_panels():
     assert len(strip) == 6 and strip[0].shape[2] == 3
 
 
+def test_short_runs_still_get_a_curve():
+    """A run with fewer episodes than the window used to vanish from the
+    plot: rolling(n=8, w=10) is one point, and one point cannot interpolate."""
+    from viz.learning_curves import aggregate_seeds, effective_window
+
+    runs = [fake_run(n=8)]
+    assert effective_window(runs, 10) == 7
+    grid, mean, std = aggregate_seeds(runs, window=10)
+    assert len(grid) > 1 and np.all(np.isfinite(mean))
+    assert effective_window([fake_run(n=100)], 10) == 10  # never grows the window
+
+
 def test_summarize_agents_ranks_by_final_return():
     agents = {
         "ppo": [fake_run(end=-20.0, wall=300.0)],
